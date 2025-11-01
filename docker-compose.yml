@@ -16,7 +16,7 @@ services:
     restart: on-failure
   db:
     restart: on-failure
-    image: postgres:latest
+    image: postgres:16
     environment:
       POSTGRES_PASSWORD: postgres
     volumes:
