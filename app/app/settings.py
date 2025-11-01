@@ -60,7 +60,7 @@ ROOT_URLCONF = "app.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [BASE_DIR / "templates"],  # ← VERIFICAR ESTA LÍNEA
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -222,6 +222,12 @@ SIMPLE_HISTORY_HISTORY_CHANGE_REASON_USE_TEXT_FIELD = True
 
 # Auth custom model
 AUTH_USER_MODEL = "application_user.User"
+
+# Backend de autenticación personalizado (email en lugar de username)
+AUTHENTICATION_BACKENDS = [
+    'apps.application_user.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 
 # Whitenoise
 STORAGES = {

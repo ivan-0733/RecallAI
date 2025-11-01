@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Registro{% endblock %}
+
+{% block body_class %}register-page{% endblock %}
+
+{% block content %}
+<div class="register-box">
+    <div class="card card-outline card-primary">
+        <div class="card-header text-center">
+            <a href="/" class="h1"><b>Recall</b>AI</a>
+            <p class="text-muted">Crea tu cuenta</p>
+        </div>
+        <div class="card-body">
+            <p class="login-box-msg">Regístrate para comenzar tu aprendizaje</p>
+
+            <form id="registerForm">
+                {% csrf_token %}
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Nombre" id="first_name" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-user"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Apellido" id="last_name" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-user"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Usuario" id="username" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-user-circle"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="email" class="form-control" placeholder="Email" id="email" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-envelope"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="password" class="form-control" placeholder="Contraseña" id="password" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-lock"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="password" class="form-control" placeholder="Confirmar contraseña" id="password_confirm" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-lock"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-8">
+                        <div class="icheck-primary">
+                            <input type="checkbox" id="agreeTerms" required>
+                            <label for="agreeTerms">
+                                Acepto los <a href="#">términos</a>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <button type="submit" class="btn btn-primary btn-block" id="registerBtn">
+                            <span id="registerBtnText">Registrar</span>
+                            <span id="registerBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status">
+                                <span class="sr-only">Cargando...</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <p class="mb-0 mt-3">
+                <a href="{% url 'frontend:login' %}" class="text-center">Ya tengo una cuenta</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    toastr.options = {
+        "closeButton": true,
+        "progressBar": true,
+        "positionClass": "toast-top-right",
+        "timeOut": "3000"
+    };
+
+    $('#registerForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const first_name = $('#first_name').val();
+        const last_name = $('#last_name').val();
+        const username = $('#username').val();
+        const email = $('#email').val();
+        const password = $('#password').val();
+        const password_confirm = $('#password_confirm').val();
+        
+        // Validar que las contraseñas coincidan
+        if (password !== password_confirm) {
+            toastr.error('Las contraseñas no coinciden');
+            return;
+        }
+        
+        // Mostrar spinner
+        $('#registerBtnText').addClass('d-none');
+        $('#registerBtnSpinner').removeClass('d-none');
+        $('#registerBtn').prop('disabled', true);
+        
+        // Llamada AJAX (CSRF token se agrega automáticamente)
+        $.ajax({
+            url: '/api/auth/register/',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                first_name: first_name,
+                last_name: last_name,
+                username: username,
+                email: email,
+                password: password,
+                password_confirm: password_confirm
+            }),
+            success: function(response) {
+                // Guardar tokens
+                localStorage.setItem('access_token', response.tokens.access);
+                localStorage.setItem('refresh_token', response.tokens.refresh);
+                localStorage.setItem('user', JSON.stringify(response.user));
+                
+                toastr.success(response.message || '¡Registro exitoso!');
+                
+                setTimeout(function() {
+                    window.location.href = '/dashboard/';
+                }, 1000);
+            },
+            error: function(xhr) {
+                $('#registerBtnText').removeClass('d-none');
+                $('#registerBtnSpinner').addClass('d-none');
+                $('#registerBtn').prop('disabled', false);
+                
+                let errorMsg = 'Error al registrar usuario';
+                
+                if (xhr.responseJSON) {
+                    if (xhr.responseJSON.email) {
+                        errorMsg = xhr.responseJSON.email[0];
+                    } else if (xhr.responseJSON.password) {
+                        errorMsg = xhr.responseJSON.password[0];
+                    } else if (xhr.responseJSON.username) {
+                        errorMsg = xhr.responseJSON.username[0];
+                    }
+                }
+                
+                toastr.error(errorMsg);
+            }
+        });
+    });
+</script>
+{% endblock %}

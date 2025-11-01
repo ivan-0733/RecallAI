@@ -49,7 +49,10 @@ class UserLoginView(APIView):
     serializer_class = UserLoginSerializer
     
     def post(self, request):
-        serializer = UserLoginSerializer(data=request.data)
+        serializer = UserLoginSerializer(
+            data=request.data,
+            context={'request': request}  # ← Importante pasar el contexto
+        )
         serializer.is_valid(raise_exception=True)
         
         user = serializer.validated_data['user']

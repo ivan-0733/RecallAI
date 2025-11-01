@@ -64,25 +64,22 @@ class UserLoginSerializer(serializers.Serializer):
         password = attrs.get('password')
         
         if email and password:
-            # Buscar usuario por email
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                raise serializers.ValidationError({
-                    "email": "No existe un usuario con este email."
-                })
-            
-            # Autenticar con username (porque Django usa username por defecto)
-            user = authenticate(username=user.username, password=password)
+            # Autenticar usando el backend personalizado
+            # El EmailBackend recibirá el email en el parámetro 'username'
+            user = authenticate(
+                request=self.context.get('request'),
+                username=email,  # El EmailBackend lo convertirá a email
+                password=password
+            )
             
             if not user:
                 raise serializers.ValidationError({
-                    "password": "Contraseña incorrecta."
+                    "detail": "Email o contraseña incorrectos."
                 })
             
             if not user.is_active:
                 raise serializers.ValidationError({
-                    "email": "Esta cuenta está desactivada."
+                    "detail": "Esta cuenta está desactivada."
                 })
             
             attrs['user'] = user

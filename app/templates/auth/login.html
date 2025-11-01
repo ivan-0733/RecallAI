@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+
+{% block title %}Login{% endblock %}
+
+{% block body_class %}login-page{% endblock %}
+
+{% block content %}
+<div class="login-box">
+    <!-- Logo -->
+    <div class="card card-outline card-primary">
+        <div class="card-header text-center">
+            <a href="/" class="h1"><b>Recall</b>AI</a>
+            <p class="text-muted">Sistema de Aprendizaje Adaptativo</p>
+        </div>
+        <div class="card-body">
+            <p class="login-box-msg">Inicia sesión para comenzar</p>
+
+            <form id="loginForm">
+                {% csrf_token %}
+                <div class="input-group mb-3">
+                    <input type="email" class="form-control" placeholder="Email" id="email" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-envelope"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="password" class="form-control" placeholder="Contraseña" id="password" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-lock"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-8">
+                        <div class="icheck-primary">
+                            <input type="checkbox" id="remember">
+                            <label for="remember">
+                                Recordarme
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+                            <span id="loginBtnText">Entrar</span>
+                            <span id="loginBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status">
+                                <span class="sr-only">Cargando...</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <p class="mb-1 mt-3">
+                <a href="#">Olvidé mi contraseña</a>
+            </p>
+            <p class="mb-0">
+                <a href="{% url 'frontend:register' %}" class="text-center">Registrar una nueva cuenta</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Configuración de Toastr
+    toastr.options = {
+        "closeButton": true,
+        "progressBar": true,
+        "positionClass": "toast-top-right",
+        "timeOut": "3000"
+    };
+
+    // Manejar submit del formulario
+    $('#loginForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const email = $('#email').val();
+        const password = $('#password').val();
+        
+        // Mostrar spinner
+        $('#loginBtnText').addClass('d-none');
+        $('#loginBtnSpinner').removeClass('d-none');
+        $('#loginBtn').prop('disabled', true);
+        
+        // Llamada AJAX a la API (CSRF token se agrega automáticamente)
+        $.ajax({
+            url: '/api/auth/login/',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                email: email,
+                password: password
+            }),
+            success: function(response) {
+                // Guardar tokens en localStorage
+                localStorage.setItem('access_token', response.tokens.access);
+                localStorage.setItem('refresh_token', response.tokens.refresh);
+                localStorage.setItem('user', JSON.stringify(response.user));
+                
+                toastr.success(response.message || '¡Bienvenido!');
+                
+                // Redirigir al dashboard
+                setTimeout(function() {
+                    window.location.href = '/dashboard/';
+                }, 1000);
+            },
+            error: function(xhr) {
+                // Ocultar spinner
+                $('#loginBtnText').removeClass('d-none');
+                $('#loginBtnSpinner').addClass('d-none');
+                $('#loginBtn').prop('disabled', false);
+                
+                let errorMsg = 'Error al iniciar sesión';
+                
+                if (xhr.responseJSON) {
+                    if (xhr.responseJSON.email) {
+                        errorMsg = xhr.responseJSON.email[0];
+                    } else if (xhr.responseJSON.password) {
+                        errorMsg = xhr.responseJSON.password[0];
+                    } else if (xhr.responseJSON.detail) {
+                        errorMsg = xhr.responseJSON.detail;
+                    }
+                }
+                
+                toastr.error(errorMsg);
+            }
+        });
+    });
+</script>
+{% endblock %}
