@@ -1,0 +1,398 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Material de Estudio - RecallAI</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+
+        .material-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .material-header {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .material-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            min-height: 500px;
+        }
+
+        .material-type-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .badge-flashcard {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-decision-tree {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .badge-mind-map {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-summary {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .weak-topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .weak-topic-tag {
+            background: #fff5f5;
+            border: 2px solid #fc8181;
+            color: #c53030;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-custom {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        /* Estilos para el contenido generado */
+        #materialContent {
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            flex-direction: column;
+        }
+
+        .spinner-border-custom {
+            width: 3rem;
+            height: 3rem;
+            border-width: 0.3em;
+        }
+    </style>
+</head>
+<body>
+    <div class="material-container">
+        <!-- Header -->
+        <div class="material-header">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-book-open text-primary"></i>
+                        <span id="materialTitle">Cargando...</span>
+                    </h1>
+                    <div id="materialMeta">
+                        <!-- Se llenará dinámicamente -->
+                    </div>
+                </div>
+                <div>
+                    <a href="/dashboard/" class="btn btn-outline-secondary btn-custom">
+                        <i class="fas fa-home"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <div class="weak-topics" id="weakTopics">
+                <!-- Se llenará dinámicamente -->
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-success btn-custom" onclick="printMaterial()">
+                    <i class="fas fa-print"></i> Imprimir
+                </button>
+                <button class="btn btn-info btn-custom" onclick="downloadMaterial()">
+                    <i class="fas fa-download"></i> Descargar HTML
+                </button>
+            </div>
+        </div>
+
+        <!-- Contenido del Material -->
+        <div class="material-content">
+            <div id="loadingSpinner" class="loading-spinner">
+                <div class="spinner-border text-primary spinner-border-custom" role="status">
+                    <span class="sr-only">Cargando...</span>
+                </div>
+                <p class="mt-3 text-muted">Cargando tu material personalizado...</p>
+            </div>
+            <div id="materialContent" style="display: none;">
+                <!-- El HTML generado se inyectará aquí -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+
+    <script>
+        let materialData = null;
+        const materialId = window.location.pathname.split('/')[2];
+
+        $(document).ready(function() {
+            loadMaterial();
+        });
+
+        function loadMaterial() {
+            const token = localStorage.getItem('access_token');
+
+            if (!token) {
+                window.location.href = '/login/';
+                return;
+            }
+
+            $.ajax({
+                url: `/api/texts/my-materials/`,
+                type: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                success: function(materials) {
+                    // Buscar el material específico
+                    materialData = materials.find(m => m.id == materialId);
+
+                    if (!materialData) {
+                        toastr.error('Material no encontrado');
+                        setTimeout(() => window.location.href = '/dashboard/', 2000);
+                        return;
+                    }
+
+                    displayMaterial(materialData);
+                },
+                error: function(xhr) {
+                    if (xhr.status === 401) {
+                        localStorage.clear();
+                        window.location.href = '/login/';
+                    } else {
+                        toastr.error('Error al cargar el material');
+                        setTimeout(() => window.location.href = '/dashboard/', 2000);
+                    }
+                }
+            });
+        }
+
+        function displayMaterial(material) {
+            // Título
+            $('#materialTitle').text(material.text_title);
+
+            // Meta información
+            const materialTypeIcons = {
+                'flashcard': 'fa-layer-group',
+                'decision_tree': 'fa-sitemap',
+                'mind_map': 'fa-project-diagram',
+                'summary': 'fa-file-alt'
+            };
+
+            const materialTypeClasses = {
+                'flashcard': 'badge-flashcard',
+                'decision_tree': 'badge-decision-tree',
+                'mind_map': 'badge-mind-map',
+                'summary': 'badge-summary'
+            };
+
+            const metaHTML = `
+                <span class="material-type-badge ${materialTypeClasses[material.material_type]}">
+                    <i class="fas ${materialTypeIcons[material.material_type]}"></i>
+                    ${material.material_type_display}
+                </span>
+                <small class="text-muted">
+                    <i class="far fa-clock"></i> 
+                    Generado el ${new Date(material.generated_at).toLocaleDateString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}
+                </small>
+                ${material.generation_time_seconds ? `
+                    <small class="text-muted ml-2">
+                        <i class="fas fa-bolt"></i> 
+                        ${material.generation_time_seconds}s de generación
+                    </small>
+                ` : ''}
+            `;
+
+            $('#materialMeta').html(metaHTML);
+
+            // Temas débiles
+            if (material.weak_topics && material.weak_topics.length > 0) {
+                const topicsHTML = material.weak_topics.map(topic => 
+                    `<span class="weak-topic-tag">⚠️ ${topic}</span>`
+                ).join('');
+                $('#weakTopics').html(`
+                    <div style="width: 100%; margin-top: 10px;">
+                        <strong style="display: block; margin-bottom: 8px;">
+                            <i class="fas fa-exclamation-triangle text-warning"></i>
+                            Áreas de enfoque:
+                        </strong>
+                        ${topicsHTML}
+                    </div>
+                `);
+            }
+
+            // Sanitizar y mostrar contenido HTML
+            const cleanHTML = DOMPurify.sanitize(material.html_content, {
+                ADD_TAGS: ['style', 'script'],
+                ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style']
+            });
+
+            $('#loadingSpinner').hide();
+            $('#materialContent').html(cleanHTML).fadeIn();
+
+            // Tracking de visualización (opcional)
+            trackMaterialView(materialId);
+        }
+
+        function trackMaterialView(materialId) {
+            const token = localStorage.getItem('access_token');
+            
+            // Registrar que el usuario vio el material
+            // Puedes crear un endpoint para esto más adelante
+            console.log('Material viewed:', materialId);
+        }
+
+        function printMaterial() {
+            window.print();
+        }
+
+        function downloadMaterial() {
+            if (!materialData) {
+                toastr.error('No hay material para descargar');
+                return;
+            }
+
+            const htmlContent = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${materialData.text_title} - ${materialData.material_type_display}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>${materialData.text_title}</h1>
+        <p>${materialData.material_type_display} - RecallAI</p>
+        <p><small>Generado el ${new Date(materialData.generated_at).toLocaleDateString('es-MX')}</small></p>
+    </div>
+    <div class="content">
+        ${materialData.html_content}
+    </div>
+</body>
+</html>
+            `;
+
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${materialData.text_title.replace(/[^a-z0-9]/gi, '_')}_${materialData.material_type}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            toastr.success('¡Descarga iniciada!');
+        }
+
+        // CSS para impresión
+        const printStyles = `
+            @media print {
+                body {
+                    background: white !important;
+                }
+                .material-header {
+                    break-inside: avoid;
+                }
+                .action-buttons {
+                    display: none !important;
+                }
+                .material-content {
+                    box-shadow: none !important;
+                }
+            }
+        `;
+
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = printStyles;
+        document.head.appendChild(styleSheet);
+    </script>
+</body>
+</html>

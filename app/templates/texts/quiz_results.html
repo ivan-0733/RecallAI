@@ -109,26 +109,23 @@
 
 {% block extra_js %}
 <script>
-    // ✅ Remover warning de salida al cargar la página
     window.onbeforeunload = null;
     
     let textId;
+    let attemptId;
+    let currentScore;
 
     $(document).ready(function() {
-        // Obtener ID del texto
         const pathParts = window.location.pathname.split('/');
         textId = pathParts[2];
         
-        // Intentar obtener resultado desde localStorage primero
         const resultStr = localStorage.getItem('quiz_result');
         
         if (resultStr) {
-            // Viene de un quiz recién enviado
             const result = JSON.parse(resultStr);
             displayResults(result);
             localStorage.removeItem('quiz_result');
         } else {
-            // Viene de "Ver Resultado" en dashboard - cargar desde API
             loadResultsFromAPI();
         }
     });
@@ -141,7 +138,6 @@
             return;
         }
         
-        // Mostrar loading
         $('#resultCard').html(`
             <div class="card-body text-center p-5">
                 <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
@@ -178,7 +174,6 @@
                         <div class="card-body text-center p-5">
                             <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
                             <h4>Error al cargar resultados</h4>
-                            <p>Por favor intenta de nuevo.</p>
                             <a href="/dashboard/" class="btn btn-primary mt-3">
                                 <i class="fas fa-home"></i> Volver al Dashboard
                             </a>
@@ -192,8 +187,9 @@
     function displayResults(result) {
         const passed = result.passed;
         const score = result.score;
+        attemptId = result.attempt.id;
+        currentScore = score;
         
-        // Construir HTML del resultado
         let resultHTML = `
             <div class="card-body text-center p-5">
                 ${passed 
@@ -236,6 +232,11 @@
         `;
         
         $('#resultCard').html(resultHTML);
+        
+        // NUEVO: Si NO aprobó, mostrar modal de selección de material
+        if (!passed && score < 80) {
+            showMaterialSelector(result);
+        }
         
         // Temas débiles
         if (result.weak_topics && result.weak_topics.length > 0) {
@@ -291,6 +292,217 @@
         });
         
         $('#detailedAnswers').html(detailedHtml);
+    }
+
+    // NUEVA FUNCIÓN: Mostrar modal de selección de material
+    function showMaterialSelector(result) {
+        const token = localStorage.getItem('access_token');
+        
+        // Primero, obtener recomendación
+        $.ajax({
+            url: `/api/texts/${textId}/recommendation/?attempt_id=${attemptId}`,
+            type: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            success: function(recommendation) {
+                renderMaterialModal(recommendation);
+            },
+            error: function() {
+                // Si falla, mostrar sin recomendación
+                renderMaterialModal({has_recommendation: false});
+            }
+        });
+    }
+
+    function renderMaterialModal(recommendation) {
+        let modalHTML = `
+        <div class="modal fade" id="materialSelectorModal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+            <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title">
+                            <i class="fas fa-lightbulb"></i>
+                            ¿Qué tipo de material quieres usar para estudiar?
+                        </h5>
+                    </div>
+                    <div class="modal-body">
+        `;
+        
+        // Si hay recomendación, mostrar banner
+        if (recommendation.has_recommendation) {
+            const materialNames = {
+                'flashcard': 'Flashcards',
+                'decision_tree': 'Árbol de Decisión',
+                'mind_map': 'Mapa Mental',
+                'summary': 'Resumen Estructurado'
+            };
+            
+            modalHTML += `
+                <div class="alert alert-success" role="alert">
+                    <h5 class="alert-heading">
+                        <i class="fas fa-star"></i> Recomendado para ti: <strong>${materialNames[recommendation.recommended_type]}</strong>
+                    </h5>
+                    <p class="mb-0">${recommendation.message}</p>
+                </div>
+            `;
+        }
+        
+        // Opciones de material
+        const materials = [
+            {
+                type: 'flashcard',
+                icon: '📇',
+                title: 'Flashcards Interactivas',
+                description: 'Tarjetas con preguntas/respuestas que puedes voltear'
+            },
+            {
+                type: 'decision_tree',
+                icon: '🌳',
+                title: 'Árbol de Decisión',
+                description: 'Flujo interactivo para elegir técnicas según el problema'
+            },
+            {
+                type: 'mind_map',
+                icon: '🗺️',
+                title: 'Mapa Mental',
+                description: 'Diagrama jerárquico colapsable de conceptos'
+            },
+            {
+                type: 'summary',
+                icon: '📄',
+                title: 'Resumen Estructurado',
+                description: 'Documento condensado con énfasis en tus temas débiles'
+            }
+        ];
+        
+        modalHTML += '<div class="row">';
+        
+        materials.forEach(function(material) {
+            const isRecommended = recommendation.has_recommendation && recommendation.recommended_type === material.type;
+            const cardClass = isRecommended ? 'border-success shadow-lg' : 'border-secondary';
+            const effectiveness = recommendation.all_effectiveness ? recommendation.all_effectiveness[material.type] : 0;
+            
+            modalHTML += `
+                <div class="col-md-6 mb-3">
+                    <div class="card ${cardClass} h-100 material-option-card" data-type="${material.type}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div class="card-body text-center">
+                            ${isRecommended ? '<span class="badge badge-success mb-2">⭐ Recomendado</span>' : ''}
+                            <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
+                            <h5 class="card-title">${material.title}</h5>
+                            <p class="card-text text-muted">${material.description}</p>
+                            ${recommendation.has_recommendation ? `
+                                <div class="mt-2">
+                                    <small class="text-muted">Tu mejora promedio: 
+                                        <strong class="${effectiveness > 0 ? 'text-success' : 'text-secondary'}">
+                                            ${effectiveness > 0 ? '+' + effectiveness + '%' : 'Sin datos'}
+                                        </strong>
+                                    </small>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        modalHTML += `
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <p class="text-muted mr-auto"><i class="fas fa-info-circle"></i> Selecciona el tipo que prefieras</p>
+                </div>
+            </div>
+        </div>
+    </div>
+        `;
+        
+        $('body').append(modalHTML);
+        $('#materialSelectorModal').modal('show');
+        
+        // Event listener para seleccionar material
+        $('.material-option-card').on('click', function() {
+            const selectedType = $(this).data('type');
+            const wasRecommended = recommendation.has_recommendation;
+            const followedRecommendation = recommendation.has_recommendation && selectedType === recommendation.recommended_type;
+            
+            generateMaterial(selectedType, wasRecommended, followedRecommendation);
+        });
+    }
+
+    function generateMaterial(materialType, wasRecommended, followedRecommendation) {
+        const token = localStorage.getItem('access_token');
+        
+        // Cerrar modal
+        $('#materialSelectorModal').modal('hide');
+        
+        // Mostrar loading
+        toastr.info('Generando material... Esto puede tomar 1-2 minutos', '', {
+            timeOut: 5000
+        });
+        
+        // Llamar a API
+        $.ajax({
+            url: '/api/texts/generate-material/',
+            type: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                material_type: materialType,
+                attempt_id: attemptId,
+                was_recommended: wasRecommended,
+                followed_recommendation: followedRecommendation
+            }),
+            success: function(response) {
+                toastr.success('¡Material encolado! Te redirigiremos cuando esté listo...', '', {
+                    timeOut: 3000
+                });
+                
+                // Polling para verificar si ya está generado (cada 5 segundos)
+                const pollInterval = setInterval(function() {
+                    checkMaterialStatus(materialType, pollInterval);
+                }, 5000);
+            },
+            error: function(xhr) {
+                toastr.error('Error al generar material: ' + (xhr.responseJSON?.error || 'Error desconocido'));
+            }
+        });
+    }
+
+    function checkMaterialStatus(materialType, pollInterval) {
+        const token = localStorage.getItem('access_token');
+        
+        $.ajax({
+            url: '/api/texts/my-materials/',
+            type: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            success: function(materials) {
+                // Buscar el material más reciente del tipo solicitado
+                const latestMaterial = materials.find(m => 
+                    m.material_type === materialType && 
+                    m.generated_at !== null
+                );
+                
+                if (latestMaterial) {
+                    clearInterval(pollInterval);
+                    toastr.success('¡Material listo! Redirigiendo...', '', {timeOut: 2000});
+                    
+                    // Redirigir al visor de material
+                    setTimeout(function() {
+                        window.location.href = `/material/${latestMaterial.id}/`;
+                    }, 2000);
+                }
+            },
+            error: function(xhr) {
+                console.error('Error checking material status:', xhr);
+                clearInterval(pollInterval);
+                toastr.error('Error al verificar el estado del material');
+            }
+        });
     }
 </script>
 {% endblock %}

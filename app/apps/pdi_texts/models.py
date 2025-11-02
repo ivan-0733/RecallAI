@@ -4,6 +4,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from apps.application_user.models import User
+from django.db.models.signals import post_save
 
 
 class PDIText(models.Model):
@@ -374,11 +375,6 @@ class UserProfile(models.Model):
         self.total_study_time_minutes += minutes
         self.save()
 
-
-# Signal para crear UserProfile automáticamente cuando se crea un User
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     """Crear perfil automáticamente al crear usuario"""
@@ -390,3 +386,234 @@ def save_user_profile(sender, instance, **kwargs):
     """Guardar perfil cuando se guarda usuario"""
     if hasattr(instance, 'profile'):
         instance.profile.save()
+
+class MaterialEffectiveness(models.Model):
+    """
+    Registra la efectividad de cada tipo de material para cada usuario
+    """
+    
+    MATERIAL_TYPES = [
+        ('flashcard', 'Flashcards'),
+        ('decision_tree', 'Árbol de Decisión'),
+        ('mind_map', 'Mapa Mental'),
+        ('summary', 'Resumen Estructurado'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='material_effectiveness',
+        verbose_name="Usuario"
+    )
+    
+    text = models.ForeignKey(
+        PDIText,
+        on_delete=models.CASCADE,
+        related_name='material_effectiveness',
+        verbose_name="Texto"
+    )
+    
+    material_type = models.CharField(
+        max_length=20,
+        choices=MATERIAL_TYPES,
+        verbose_name="Tipo de Material"
+    )
+    
+    quiz_before_score = models.FloatField(
+        verbose_name="Score Antes",
+        help_text="Puntuación antes de usar el material"
+    )
+    
+    quiz_after_score = models.FloatField(
+        verbose_name="Score Después",
+        help_text="Puntuación después de usar el material"
+    )
+    
+    improvement = models.FloatField(
+        verbose_name="Mejora",
+        help_text="Diferencia: after - before"
+    )
+    
+    time_spent_minutes = models.IntegerField(
+        verbose_name="Tiempo Estudiado (minutos)",
+        help_text="Tiempo que pasó estudiando el material"
+    )
+    
+    interactions_count = models.IntegerField(
+        default=0,
+        verbose_name="Interacciones",
+        help_text="Número de clics, flips, expansiones"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de registro"
+    )
+    
+    class Meta:
+        db_table = 'material_effectiveness'
+        verbose_name = 'Efectividad de Material'
+        verbose_name_plural = 'Efectividad de Materiales'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'text', 'material_type']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.material_type} - Mejora: {self.improvement}%"
+
+
+class MaterialRequest(models.Model):
+    """
+    Historial de solicitudes de material
+    """
+    
+    MATERIAL_TYPES = [
+        ('flashcard', 'Flashcards'),
+        ('decision_tree', 'Árbol de Decisión'),
+        ('mind_map', 'Mapa Mental'),
+        ('summary', 'Resumen Estructurado'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='material_requests',
+        verbose_name="Usuario"
+    )
+    
+    text = models.ForeignKey(
+        PDIText,
+        on_delete=models.CASCADE,
+        related_name='material_requests',
+        verbose_name="Texto"
+    )
+    
+    attempt = models.ForeignKey(
+        QuizAttempt,
+        on_delete=models.CASCADE,
+        related_name='material_requests',
+        verbose_name="Intento de Quiz"
+    )
+    
+    material_type = models.CharField(
+        max_length=20,
+        choices=MATERIAL_TYPES,
+        verbose_name="Tipo de Material"
+    )
+    
+    was_recommended = models.BooleanField(
+        default=False,
+        verbose_name="¿Fue Recomendado?"
+    )
+    
+    followed_recommendation = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name="¿Siguió la Recomendación?"
+    )
+    
+    requested_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de Solicitud"
+    )
+    
+    class Meta:
+        db_table = 'material_request'
+        verbose_name = 'Solicitud de Material'
+        verbose_name_plural = 'Solicitudes de Material'
+        ordering = ['-requested_at']
+        indexes = [
+            models.Index(fields=['user', 'text']),
+            models.Index(fields=['-requested_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.material_type}"
+
+
+class UserDidacticMaterial(models.Model):
+    """
+    Material didáctico generado por IA
+    """
+    
+    MATERIAL_TYPES = [
+        ('flashcard', 'Flashcards'),
+        ('decision_tree', 'Árbol de Decisión'),
+        ('mind_map', 'Mapa Mental'),
+        ('summary', 'Resumen Estructurado'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='didactic_materials',
+        verbose_name="Usuario"
+    )
+    
+    text = models.ForeignKey(
+        PDIText,
+        on_delete=models.CASCADE,
+        related_name='didactic_materials',
+        verbose_name="Texto"
+    )
+    
+    attempt = models.ForeignKey(
+        QuizAttempt,
+        on_delete=models.CASCADE,
+        related_name='didactic_materials',
+        verbose_name="Intento"
+    )
+    
+    material_type = models.CharField(
+        max_length=20,
+        choices=MATERIAL_TYPES,
+        verbose_name="Tipo"
+    )
+    
+    html_content = models.TextField(
+        verbose_name="HTML",
+        help_text="HTML sanitizado"
+    )
+    
+    weak_topics = models.JSONField(
+        verbose_name="Temas Enfocados"
+    )
+    
+    requested_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Solicitado"
+    )
+    
+    generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Generado"
+    )
+    
+    generation_time_seconds = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Tiempo Generación"
+    )
+    
+    was_effective = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name="¿Efectivo?"
+    )
+    
+    class Meta:
+        db_table = 'user_didactic_material'
+        verbose_name = 'Material Didáctico'
+        verbose_name_plural = 'Materiales Didácticos'
+        ordering = ['-requested_at']
+        indexes = [
+            models.Index(fields=['user', 'text']),
+            models.Index(fields=['material_type']),
+            models.Index(fields=['-requested_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.material_type}"

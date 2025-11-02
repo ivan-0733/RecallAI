@@ -8,6 +8,15 @@ from collections import Counter
 from django.utils import timezone
 from datetime import timedelta
 
+from apps.pdi_texts.recommendation import get_recommended_material
+from apps.pdi_texts.tasks_material import generate_didactic_material
+from apps.pdi_texts.models import MaterialRequest, UserDidacticMaterial
+from apps.pdi_texts.serializers import (
+    MaterialRecommendationSerializer,
+    MaterialGenerateRequestSerializer,
+    UserDidacticMaterialSerializer
+)
+
 from apps.pdi_texts.models import PDIText, InitialQuiz, QuizAttempt, UserProfile
 from apps.pdi_texts.serializers import (
     PDITextListSerializer,
@@ -281,6 +290,102 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             'detailed_answers': detailed_answers,
             'message': '¡Excelente! Has aprobado' if attempt.passed() else 'Necesitas reforzar algunos temas'
         })
+    
+    @action(detail=False, methods=['post'], url_path='generate-material')
+    def generate_material(self, request):
+        """
+        Genera material didáctico del tipo seleccionado
+        POST /api/texts/generate-material/
+        Body: {
+            "material_type": "flashcard",
+            "attempt_id": 123,
+            "was_recommended": true,
+            "followed_recommendation": true
+        }
+        """
+        serializer = MaterialGenerateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        material_type = serializer.validated_data['material_type']
+        attempt_id = serializer.validated_data['attempt_id']
+        was_recommended = serializer.validated_data.get('was_recommended', False)
+        followed_recommendation = serializer.validated_data.get('followed_recommendation', None)
+        
+        # Validar que el intento existe y pertenece al usuario
+        try:
+            attempt = QuizAttempt.objects.get(id=attempt_id, user=request.user)
+        except QuizAttempt.DoesNotExist:
+            return Response(
+                {'error': 'Intento no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Registrar solicitud
+        MaterialRequest.objects.create(
+            user=request.user,
+            text=attempt.quiz.text,
+            attempt=attempt,
+            material_type=material_type,
+            was_recommended=was_recommended,
+            followed_recommendation=followed_recommendation
+        )
+        
+        # Encolar tarea Celery
+        task = generate_didactic_material.delay(
+            user_id=request.user.id,
+            attempt_id=attempt_id,
+            material_type=material_type
+        )
+        
+        return Response({
+            'task_id': str(task.id),
+            'status': 'pending',
+            'message': f'Generando {material_type}... Esto puede tomar 1-2 minutos.',
+            'material_type': material_type
+        }, status=status.HTTP_202_ACCEPTED)
+    
+    @action(detail=True, methods=['get'], url_path='recommendation')
+    def get_recommendation(self, request, pk=None):
+        """
+        Obtiene recomendación de material basada en historial
+        GET /api/texts/{id}/recommendation/?attempt_id=123
+        """
+        text = self.get_object()
+        attempt_id = request.query_params.get('attempt_id')
+        
+        if not attempt_id:
+            return Response(
+                {'error': 'Se requiere attempt_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar que el intento existe
+        try:
+            attempt = QuizAttempt.objects.get(id=attempt_id, user=request.user)
+        except QuizAttempt.DoesNotExist:
+            return Response(
+                {'error': 'Intento no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Obtener recomendación
+        recommendation = get_recommended_material(request.user, text)
+        
+        serializer = MaterialRecommendationSerializer(recommendation)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='my-materials')
+    def my_materials(self, request):
+        """
+        Lista todos los materiales generados del usuario
+        GET /api/texts/my-materials/
+        """
+        materials = UserDidacticMaterial.objects.filter(
+            user=request.user
+        ).select_related('text', 'attempt').order_by('-requested_at')
+        
+        serializer = UserDidacticMaterialSerializer(materials, many=True)
+        return Response(serializer.data)
 
 
 class QuizAttemptViewSet(viewsets.ReadOnlyModelViewSet):

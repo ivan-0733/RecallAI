@@ -1,5 +1,109 @@
 from rest_framework import serializers
-from apps.pdi_texts.models import PDIText, InitialQuiz, QuizAttempt, UserProfile
+from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
+from apps.application_user.models import User
+from apps.pdi_texts.models import (
+    PDIText, 
+    InitialQuiz, 
+    QuizAttempt, 
+    UserProfile,
+    MaterialEffectiveness,
+    MaterialRequest,
+    UserDidacticMaterial
+)
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """Serializer para registro de nuevos usuarios"""
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[validate_password],
+        style={'input_type': 'password'}
+    )
+    password_confirm = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={'input_type': 'password'}
+    )
+    
+    class Meta:
+        model = User
+        fields = ('email', 'username', 'first_name', 'last_name', 'password', 'password_confirm')
+        extra_kwargs = {
+            'first_name': {'required': True},
+            'last_name': {'required': True},
+        }
+    
+    def validate(self, attrs):
+        """Validar que las contraseñas coincidan"""
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError({
+                "password": "Las contraseñas no coinciden."
+            })
+        return attrs
+    
+    def create(self, validated_data):
+        """Crear usuario nuevo"""
+        validated_data.pop('password_confirm')
+        
+        user = User.objects.create_user(
+            email=validated_data['email'],
+            username=validated_data.get('username', validated_data['email']),
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
+            password=validated_data['password']
+        )
+        
+        return user
+
+
+class UserLoginSerializer(serializers.Serializer):
+    """Serializer para login de usuarios"""
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    
+    def validate(self, attrs):
+        """Validar credenciales"""
+        email = attrs.get('email')
+        password = attrs.get('password')
+        
+        if email and password:
+            user = authenticate(
+                request=self.context.get('request'),
+                username=email,
+                password=password
+            )
+            
+            if not user:
+                raise serializers.ValidationError({
+                    "detail": "Email o contraseña incorrectos."
+                })
+            
+            if not user.is_active:
+                raise serializers.ValidationError({
+                    "detail": "Esta cuenta está desactivada."
+                })
+            
+            attrs['user'] = user
+            return attrs
+        else:
+            raise serializers.ValidationError({
+                "detail": "Debe proporcionar email y contraseña."
+            })
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer para información del usuario"""
+    
+    class Meta:
+        model = User
+        fields = ('id', 'email', 'username', 'first_name', 'last_name', 'is_active', 'date_joined')
+        read_only_fields = ('id', 'date_joined')
 
 
 class PDITextListSerializer(serializers.ModelSerializer):
@@ -168,3 +272,46 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     def get_full_name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
+
+
+class MaterialRecommendationSerializer(serializers.Serializer):
+    """Serializer para la respuesta de recomendación"""
+    has_recommendation = serializers.BooleanField()
+    recommended_type = serializers.CharField(allow_null=True)
+    expected_improvement = serializers.FloatField()
+    all_effectiveness = serializers.DictField()
+    reason = serializers.CharField()
+    message = serializers.CharField()
+
+
+class MaterialGenerateRequestSerializer(serializers.Serializer):
+    """Serializer para solicitud de generación de material"""
+    material_type = serializers.ChoiceField(choices=[
+        'flashcard',
+        'decision_tree',
+        'mind_map',
+        'summary'
+    ])
+    attempt_id = serializers.IntegerField()
+    was_recommended = serializers.BooleanField(default=False)
+    followed_recommendation = serializers.BooleanField(required=False, allow_null=True)
+
+
+class UserDidacticMaterialSerializer(serializers.ModelSerializer):
+    """Serializer para material didáctico generado"""
+    text_title = serializers.CharField(source='text.title', read_only=True)
+    material_type_display = serializers.CharField(source='get_material_type_display', read_only=True)
+    
+    class Meta:
+        model = UserDidacticMaterial
+        fields = [
+            'id',
+            'text_title',
+            'material_type',
+            'material_type_display',
+            'html_content',
+            'weak_topics',
+            'requested_at',
+            'generated_at',
+            'generation_time_seconds'
+        ]

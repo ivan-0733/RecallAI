@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from django.views.generic import RedirectView
+from django.views.generic import TemplateView
 
 # Endpoint para swagger
 schema_view = get_schema_view(
@@ -41,6 +42,8 @@ urlpatterns = [
         name="schema-swagger-ui",
     ),
     path("redoc/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
+
+    path("material/<int:material_id>/", TemplateView.as_view(template_name="texts/material_viewer.html"), name="material_viewer"),
 ]
 
 # ✅ CRÍTICO: Servir archivos media
