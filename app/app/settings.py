@@ -41,18 +41,17 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # ✅ MOVER AQUÍ - Al principio para que se ejecute primero
+    "app.middleware.DisableFrameOptionsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    # Cors for handling any request from the outside
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # Cors simple history
     "simple_history.middleware.HistoryRequestMiddleware",
-    # Allow Locations and language support
     "django.middleware.locale.LocaleMiddleware",
 ]
 
@@ -252,6 +251,8 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos max por tarea
 
 # Permitir que archivos del mismo origen se muestren en iframes
 X_FRAME_OPTIONS = 'SAMEORIGIN'
+SECURE_CONTENT_TYPE_NOSNIFF = False
+SECURE_BROWSER_XSS_FILTER = False
 
 # Gemini API Configuration
 GEMINI_API_KEY = "AIzaSyB7TQhKpt8MX8X7gH6gSQdFQwovgtf5v1k"

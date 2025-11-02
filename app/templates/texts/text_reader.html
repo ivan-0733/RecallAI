@@ -249,11 +249,28 @@
                     $('#startQuizBtn').prop('disabled', false);
                 }
                 
-                // ✅ NUEVO: Detectar tipo de contenido y mostrar apropiadamente
+                // ✅ MODIFICADO: Detectar tipo de contenido y mostrar apropiadamente
                 if (text.has_file && text.file_url) {
                     if (text.file_type === 'pdf') {
-                        // Mostrar PDF en iframe
-                        $('#pdfFrame').attr('src', text.file_url);
+                        let pdfUrl = text.file_url;
+                        
+                        // Cambiar puerto si es necesario
+                        if (pdfUrl.includes('localhost:8000')) {
+                            pdfUrl = pdfUrl.replace('localhost:8000', 'localhost:8010');
+                        }
+                        
+                        console.log('📄 Cargando PDF desde:', pdfUrl);
+                        
+                        // ✅ USAR PDF.JS DE MOZILLA (evita problemas de X-Frame-Options)
+                        // Sin toolbar + zoom ajustado + página completa
+                        const viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#toolbar=0&zoom=page-width`;
+                        $('#pdfFrame').attr('src', viewerUrl);
+                        
+                        // Detectar cuando carga
+                        $('#pdfFrame').on('load', function() {
+                            console.log('✅ PDF cargado exitosamente con PDF.js');
+                        });
+                        
                         $('#pdfViewer').show();
                         $('#textViewer').hide();
                         $('#txtViewer').hide();
@@ -263,7 +280,7 @@
                             toggleView(text);
                         });
                         
-                        toastr.info('Mostrando archivo PDF original', '', {timeOut: 2000});
+                        toastr.info('Mostrando PDF', '', {timeOut: 2000});
                         
                     } else if (text.file_type === 'txt') {
                         // Cargar y mostrar TXT
@@ -334,6 +351,16 @@
         } else {
             // Cambiar a vista de archivo original
             if (text.file_type === 'pdf') {
+                let pdfUrl = text.file_url;
+                if (pdfUrl.includes('localhost:8000')) {
+                    pdfUrl = pdfUrl.replace('localhost:8000', 'localhost:8010');
+                }
+                
+                // Usar PDF.js viewer
+                // Sin toolbar + zoom ajustado + página completa
+                const viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#toolbar=0&zoom=page-width`;
+                $('#pdfFrame').attr('src', viewerUrl);
+                
                 $('#pdfViewer').show();
                 $('#textViewer').hide();
                 $('#txtViewer').hide();

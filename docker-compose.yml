@@ -8,6 +8,7 @@ services:
     command: /start.sh
     volumes:
       - .:/code
+      - ./app/media:/code/app/media 
     env_file: .env
     ports:
       - "8010:8000"
