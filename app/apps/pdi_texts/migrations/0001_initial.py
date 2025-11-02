@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
                 ('total_questions', models.IntegerField(default=20, verbose_name='Total de Preguntas')),
                 ('generation_prompt', models.TextField(blank=True, help_text='Prompt enviado a Gemini Pro para generar este quiz', verbose_name='Prompt Usado')),
                 ('generation_time_seconds', models.IntegerField(blank=True, null=True, verbose_name='Tiempo de Generación (segundos)')),
-                ('model_used', models.CharField(default='gemini-pro', max_length=50, verbose_name='Modelo de IA Usado')),
+                ('model_used', models.CharField(default='gemini-2.5-pro', max_length=16000, verbose_name='Modelo de IA Usado')),
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Fecha de generación')),
                 ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Última actualización')),
                 ('text', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='initial_quiz', to='pdi_texts.pditext', verbose_name='Texto PDI')),

@@ -233,11 +233,6 @@
         
         $('#resultCard').html(resultHTML);
         
-        // NUEVO: Si NO aprobó, mostrar modal de selección de material
-        if (!passed && score < 80) {
-            showMaterialSelector(result);
-        }
-        
         // Temas débiles
         if (result.weak_topics && result.weak_topics.length > 0) {
             $('#weakTopicsCard').show();
@@ -257,7 +252,7 @@
             $('#weakTopicsList').html(topicsHtml);
         }
         
-        // Respuestas detalladas
+        // ✅ RESTAURADO: Respuestas detalladas
         let detailedHtml = '';
         result.detailed_answers.forEach(function(answer, index) {
             const cardClass = answer.is_correct ? 'border-success' : 'border-danger';

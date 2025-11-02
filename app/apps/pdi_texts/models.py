@@ -174,8 +174,8 @@ class InitialQuiz(models.Model):
     )
     
     model_used = models.CharField(
-        max_length=50,
-        default='gemini-pro',
+        max_length=16000,
+        default='gemini-2.5-pro',
         verbose_name="Modelo de IA Usado"
     )
     

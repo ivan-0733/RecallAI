@@ -121,13 +121,13 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
             raise ValueError(f"Tipo de material inválido: {material_type}")
         
         # Llamar a Gemini Pro con MÁXIMO de tokens
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-2.5-pro')
         
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=8192,  # Máximo permitido
+                max_output_tokens=16000,  # Máximo permitido
                 top_p=0.95,
                 top_k=40,
             )

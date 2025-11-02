@@ -30,3 +30,7 @@ class QuizInterfaceView(TemplateView):
 class QuizResultsView(TemplateView):
     """Vista para ver resultados de cuestionario"""
     template_name = 'texts/quiz_results.html'
+
+class MaterialsHistoryView(TemplateView):
+    """Vista para historial de materiales didácticos"""
+    template_name = 'texts/materials_history.html'

@@ -5,7 +5,8 @@ from api.frontend_views import (
     DashboardView,
     TextReaderView,
     QuizInterfaceView,
-    QuizResultsView
+    QuizResultsView,
+    MaterialsHistoryView
 )
 
 app_name = 'frontend'
@@ -19,4 +20,6 @@ urlpatterns = [
     path('text/<int:text_id>/', TextReaderView.as_view(), name='text_reader'),
     path('quiz/<int:text_id>/', QuizInterfaceView.as_view(), name='quiz_interface'),
     path('quiz/<int:text_id>/results/', QuizResultsView.as_view(), name='quiz_results'),
+    
+    path('materials/history/<int:text_id>/', MaterialsHistoryView.as_view(), name='materials_history'),
 ]
