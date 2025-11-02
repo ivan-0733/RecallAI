@@ -250,5 +250,8 @@ CELERY_TIMEZONE = 'America/Mexico_City'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos max por tarea
 
+# Permitir que archivos del mismo origen se muestren en iframes
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
 # Gemini API Configuration
 GEMINI_API_KEY = "AIzaSyB7TQhKpt8MX8X7gH6gSQdFQwovgtf5v1k"

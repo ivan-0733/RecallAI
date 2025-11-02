@@ -1,0 +1,387 @@
+{% extends 'base.html' %}
+
+{% block title %}Leer Texto{% endblock %}
+
+{% block body_class %}sidebar-mini layout-fixed{% endblock %}
+
+{% block content %}
+<!-- Navbar -->
+<nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+        <li class="nav-item">
+            <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+        </li>
+        <li class="nav-item d-none d-sm-inline-block">
+            <a href="/dashboard/" class="nav-link">
+                <i class="fas fa-arrow-left"></i> Volver al Dashboard
+            </a>
+        </li>
+    </ul>
+
+    <ul class="navbar-nav ml-auto">
+        <li class="nav-item">
+            <a class="nav-link" data-widget="fullscreen" href="#" role="button">
+                <i class="fas fa-expand-arrows-alt"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+
+<!-- Main Sidebar Container -->
+<aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="/dashboard/" class="brand-link">
+        <i class="fas fa-brain brand-image ml-3"></i>
+        <span class="brand-text font-weight-light">RecallAI</span>
+    </a>
+
+    <div class="sidebar">
+        <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+            <div class="image">
+                <i class="fas fa-user-circle fa-2x text-white"></i>
+            </div>
+            <div class="info">
+                <a href="#" class="d-block" id="userName">Usuario</a>
+            </div>
+        </div>
+
+        <nav class="mt-2">
+            <ul class="nav nav-pills nav-sidebar flex-column">
+                <li class="nav-item">
+                    <a href="/dashboard/" class="nav-link">
+                        <i class="nav-icon fas fa-tachometer-alt"></i>
+                        <p>Dashboard</p>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</aside>
+
+<!-- Content Wrapper -->
+<div class="content-wrapper">
+    <!-- Content Header -->
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0" id="textTitle">Cargando...</h1>
+                </div>
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item"><a href="/dashboard/">Inicio</a></li>
+                        <li class="breadcrumb-item active">Leer Texto</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <section class="content">
+        <div class="container-fluid">
+            <!-- Loading -->
+            <div id="loadingText" class="text-center">
+                <i class="fas fa-spinner fa-spin fa-3x"></i>
+                <p class="mt-3">Cargando texto...</p>
+            </div>
+
+            <!-- Contenido del texto -->
+            <div id="textContent" style="display: none;">
+                <div class="row">
+                    <!-- Información del texto (Columna Izquierda) -->
+                    <div class="col-md-3">
+                        <div class="card card-primary card-outline sticky-top" style="top: 70px;">
+                            <div class="card-header">
+                                <h3 class="card-title">
+                                    <i class="fas fa-info-circle"></i> Información
+                                </h3>
+                            </div>
+                            <div class="card-body">
+                                <dl>
+                                    <dt>Tema</dt>
+                                    <dd id="textTopic"></dd>
+                                    
+                                    <dt>Dificultad</dt>
+                                    <dd id="textDifficulty"></dd>
+                                    
+                                    <dt>Tiempo estimado</dt>
+                                    <dd id="textTime"></dd>
+                                    
+                                    <dt>Palabras</dt>
+                                    <dd id="textWords"></dd>
+                                </dl>
+                                
+                                <hr>
+                                
+                                <div id="previousAttempts" style="display: none;">
+                                    <h6><i class="fas fa-history"></i> Intentos Previos</h6>
+                                    <ul id="attemptsList" class="list-unstyled"></ul>
+                                </div>
+                                
+                                <button id="startQuizBtn" class="btn btn-success btn-block" disabled>
+                                    <i class="fas fa-clipboard-check"></i>
+                                    Tomar Cuestionario
+                                </button>
+                                
+                                <div id="readingTimer" class="text-center mt-3">
+                                    <small class="text-muted">
+                                        <i class="far fa-clock"></i>
+                                        Tiempo de lectura: <span id="timerDisplay">00:00</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visor de Contenido (Columna Derecha) -->
+                    <div class="col-md-9">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">
+                                    <i class="fas fa-book-open"></i> Contenido
+                                </h3>
+                                <div class="card-tools">
+                                    <button type="button" class="btn btn-tool" id="toggleViewBtn" style="display: none;">
+                                        <i class="fas fa-exchange-alt"></i> Cambiar Vista
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <!-- Visor de PDF -->
+                                <div id="pdfViewer" style="display: none; height: 800px;">
+                                    <iframe id="pdfFrame" style="width: 100%; height: 100%; border: none;"></iframe>
+                                </div>
+                                
+                                <!-- Visor de TXT -->
+                                <div id="txtViewer" style="display: none; padding: 20px; background: #f8f9fa; max-height: 800px; overflow-y: auto;">
+                                    <pre id="txtContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 14px;"></pre>
+                                </div>
+                                
+                                <!-- Vista de texto extraído (fallback) -->
+                                <div id="textViewer" style="padding: 20px; font-size: 16px; line-height: 1.8;">
+                                    <div id="textContentBody" style="white-space: pre-wrap;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Footer -->
+<footer class="main-footer">
+    <strong>Copyright &copy; 2024 <a href="#">RecallAI</a>.</strong>
+    Todos los derechos reservados.
+</footer>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let textId;
+    let startTime;
+    let timerInterval;
+    let currentViewMode = 'file'; // 'file', 'text'
+
+    $(document).ready(function() {
+        // Obtener ID del texto desde URL
+        const pathParts = window.location.pathname.split('/');
+        textId = pathParts[2]; // /text/123/
+        
+        const token = localStorage.getItem('access_token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (!token) {
+            window.location.href = '/login/';
+            return;
+        }
+        
+        if (user.first_name) {
+            $('#userName').text(user.first_name + ' ' + user.last_name);
+        }
+        
+        // Cargar texto
+        loadText();
+        
+        // Iniciar cronómetro
+        startReadingTimer();
+    });
+
+    function loadText() {
+        const token = localStorage.getItem('access_token');
+        
+        $.ajax({
+            url: `/api/texts/${textId}/`,
+            type: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            success: function(text) {
+                $('#loadingText').hide();
+                
+                // Mostrar información
+                $('#textTitle').text(text.title);
+                $('#textTopic').html(`<span class="badge badge-primary">${text.topic}</span>`);
+                $('#textDifficulty').html(getDifficultyBadge(text.difficulty));
+                $('#textTime').text(text.estimated_time_minutes + ' minutos');
+                $('#textWords').text(text.word_count.toLocaleString() + ' palabras');
+                
+                // Mostrar intentos previos
+                if (text.previous_attempts && text.previous_attempts.length > 0) {
+                    $('#previousAttempts').show();
+                    let attemptsHtml = '';
+                    text.previous_attempts.forEach(function(attempt) {
+                        const date = new Date(attempt.created_at).toLocaleDateString();
+                        const badge = attempt.score >= 80 ? 'success' : 'danger';
+                        attemptsHtml += `
+                            <li>
+                                <span class="badge badge-${badge}">${attempt.score.toFixed(1)}%</span>
+                                ${date}
+                            </li>
+                        `;
+                    });
+                    $('#attemptsList').html(attemptsHtml);
+                }
+                
+                // Habilitar botón de quiz
+                if (text.has_quiz) {
+                    $('#startQuizBtn').prop('disabled', false);
+                }
+                
+                // ✅ NUEVO: Detectar tipo de contenido y mostrar apropiadamente
+                if (text.has_file && text.file_url) {
+                    if (text.file_type === 'pdf') {
+                        // Mostrar PDF en iframe
+                        $('#pdfFrame').attr('src', text.file_url);
+                        $('#pdfViewer').show();
+                        $('#textViewer').hide();
+                        $('#txtViewer').hide();
+                        
+                        // Mostrar botón de cambiar vista
+                        $('#toggleViewBtn').show().off('click').on('click', function() {
+                            toggleView(text);
+                        });
+                        
+                        toastr.info('Mostrando archivo PDF original', '', {timeOut: 2000});
+                        
+                    } else if (text.file_type === 'txt') {
+                        // Cargar y mostrar TXT
+                        loadTxtFile(text.file_url);
+                        $('#txtViewer').show();
+                        $('#textViewer').hide();
+                        $('#pdfViewer').hide();
+                        
+                        // Mostrar botón de cambiar vista
+                        $('#toggleViewBtn').show().off('click').on('click', function() {
+                            toggleView(text);
+                        });
+                        
+                        toastr.info('Mostrando archivo TXT original', '', {timeOut: 2000});
+                        
+                    } else {
+                        // Tipo desconocido, mostrar texto extraído
+                        showExtractedText(text);
+                    }
+                } else {
+                    // No hay archivo, mostrar texto extraído
+                    showExtractedText(text);
+                }
+                
+                $('#textContent').show();
+            },
+            error: function(xhr) {
+                $('#loadingText').html('<p class="text-danger">Error al cargar el texto</p>');
+                
+                if (xhr.status === 401) {
+                    localStorage.clear();
+                    window.location.href = '/login/';
+                }
+            }
+        });
+    }
+
+    function loadTxtFile(url) {
+        $.ajax({
+            url: url,
+            type: 'GET',
+            dataType: 'text',
+            success: function(content) {
+                $('#txtContent').text(content);
+            },
+            error: function() {
+                toastr.error('Error al cargar archivo TXT');
+                // Fallback a texto extraído
+                loadText();
+            }
+        });
+    }
+
+    function showExtractedText(text) {
+        $('#textContentBody').text(text.content);
+        $('#textViewer').show();
+        $('#pdfViewer').hide();
+        $('#txtViewer').hide();
+        currentViewMode = 'text';
+    }
+
+    function toggleView(text) {
+        if (currentViewMode === 'file') {
+            // Cambiar a vista de texto extraído
+            showExtractedText(text);
+            $('#toggleViewBtn').html('<i class="fas fa-file-pdf"></i> Ver Archivo Original');
+            toastr.info('Mostrando texto extraído', '', {timeOut: 2000});
+        } else {
+            // Cambiar a vista de archivo original
+            if (text.file_type === 'pdf') {
+                $('#pdfViewer').show();
+                $('#textViewer').hide();
+                $('#txtViewer').hide();
+                $('#toggleViewBtn').html('<i class="fas fa-exchange-alt"></i> Cambiar Vista');
+                toastr.info('Mostrando PDF original', '', {timeOut: 2000});
+            } else if (text.file_type === 'txt') {
+                $('#txtViewer').show();
+                $('#textViewer').hide();
+                $('#pdfViewer').hide();
+                $('#toggleViewBtn').html('<i class="fas fa-exchange-alt"></i> Cambiar Vista');
+                toastr.info('Mostrando TXT original', '', {timeOut: 2000});
+            }
+            currentViewMode = 'file';
+        }
+    }
+
+    function startReadingTimer() {
+        startTime = Date.now();
+        
+        timerInterval = setInterval(function() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            
+            $('#timerDisplay').text(
+                String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0')
+            );
+        }, 1000);
+    }
+
+    function getDifficultyBadge(difficulty) {
+        const badges = {
+            'beginner': '<span class="badge badge-success">Principiante</span>',
+            'intermediate': '<span class="badge badge-warning">Intermedio</span>',
+            'advanced': '<span class="badge badge-danger">Avanzado</span>'
+        };
+        return badges[difficulty] || '';
+    }
+
+    // Ir a cuestionario
+    $('#startQuizBtn').on('click', function() {
+        clearInterval(timerInterval);
+        const readingTime = Math.floor((Date.now() - startTime) / 1000);
+        
+        // Guardar tiempo de lectura en localStorage para usarlo en el quiz
+        localStorage.setItem('reading_time', readingTime);
+        
+        window.location.href = `/quiz/${textId}/`;
+    });
+</script>
+{% endblock %}

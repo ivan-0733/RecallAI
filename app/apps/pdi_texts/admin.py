@@ -4,7 +4,7 @@ from django.urls import reverse, path
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect
-from apps.pdi_texts.models import PDIText, InitialQuiz
+from apps.pdi_texts.models import PDIText, InitialQuiz, QuizAttempt, UserProfile
 from apps.pdi_texts.tasks import generate_initial_quiz
 from apps.pdi_texts.utils import (
     extract_text_from_pdf, 
@@ -549,3 +549,58 @@ class InitialQuizAdmin(admin.ModelAdmin):
             color, icon, message
         )
     validation_result.short_description = 'Resultado de Validación'
+
+@admin.register(QuizAttempt)
+class QuizAttemptAdmin(admin.ModelAdmin):
+    list_display = [
+        'user_email',
+        'text_title',
+        'attempt_number',
+        'score_badge',
+        'time_display',
+        'created_at'
+    ]
+    
+    list_filter = ['created_at', 'quiz__text']
+    search_fields = ['user__email', 'quiz__text__title']
+    readonly_fields = ['user', 'quiz', 'attempt_number', 'score', 'answers_json', 'weak_topics', 'time_spent_seconds', 'created_at']
+    
+    def user_email(self, obj):
+        return obj.user.email
+    user_email.short_description = 'Usuario'
+    
+    def text_title(self, obj):
+        return obj.quiz.text.title
+    text_title.short_description = 'Texto'
+    
+    def score_badge(self, obj):
+        color = 'success' if obj.passed() else 'danger'
+        score_formatted = f"{obj.score:.1f}%"
+        return format_html(
+            '<span class="badge badge-{}">{}</span>',
+            color, score_formatted
+        )
+    score_badge.short_description = 'Puntuación'
+    
+    def time_display(self, obj):
+        minutes = obj.time_spent_seconds // 60
+        seconds = obj.time_spent_seconds % 60
+        return f"{minutes}:{seconds:02d}"
+    time_display.short_description = 'Tiempo'
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ['user_email', 'study_streak', 'total_study_time_display', 'last_study_date']
+    search_fields = ['user__email']
+    readonly_fields = ['user', 'created_at', 'updated_at']
+    
+    def user_email(self, obj):
+        return obj.user.email
+    user_email.short_description = 'Usuario'
+    
+    def total_study_time_display(self, obj):
+        hours = obj.total_study_time_minutes // 60
+        minutes = obj.total_study_time_minutes % 60
+        return f"{hours}h {minutes}min"
+    total_study_time_display.short_description = 'Tiempo Total'

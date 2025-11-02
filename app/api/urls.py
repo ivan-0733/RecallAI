@@ -1,5 +1,6 @@
-from django.urls import path
+from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.routers import DefaultRouter
 
 from api.views import (
     UserRegistrationView,
@@ -8,7 +9,19 @@ from api.views import (
     UserProfileView,
 )
 
+from apps.pdi_texts.views import (
+    PDITextViewSet,
+    QuizAttemptViewSet,
+    UserProfileViewSet
+)
+
 app_name = 'api'
+
+# Router para ViewSets
+router = DefaultRouter()
+router.register(r'texts', PDITextViewSet, basename='texts')
+router.register(r'attempts', QuizAttemptViewSet, basename='attempts')
+router.register(r'profile', UserProfileViewSet, basename='user-profile')
 
 urlpatterns = [
     # Autenticación (API REST)
@@ -17,4 +30,7 @@ urlpatterns = [
     path('auth/logout/', UserLogoutView.as_view(), name='logout'),
     path('auth/profile/', UserProfileView.as_view(), name='profile'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # Router de ViewSets
+    path('', include(router.urls)),
 ]

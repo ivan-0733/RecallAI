@@ -230,3 +230,163 @@ def update_text_quiz_flag_on_delete(sender, instance, **kwargs):
         text.save(update_fields=['has_quiz'])
     except PDIText.DoesNotExist:
         pass
+
+class QuizAttempt(models.Model):
+    """
+    Registro de intentos de cuestionarios por parte de los alumnos
+    """
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='quiz_attempts',
+        verbose_name="Alumno"
+    )
+    
+    quiz = models.ForeignKey(
+        InitialQuiz,
+        on_delete=models.CASCADE,
+        related_name='attempts',
+        verbose_name="Cuestionario"
+    )
+    
+    attempt_number = models.IntegerField(
+        verbose_name="Número de Intento",
+        help_text="1, 2, 3..."
+    )
+    
+    score = models.FloatField(
+        verbose_name="Puntuación",
+        help_text="Porcentaje de respuestas correctas (0-100)"
+    )
+    
+    answers_json = models.JSONField(
+        verbose_name="Respuestas (JSON)",
+        help_text="Array de objetos: [{question_id, selected_answer, is_correct}]"
+    )
+    
+    weak_topics = models.JSONField(
+        verbose_name="Temas Débiles",
+        help_text="Lista de temas donde falló: ['Filtros Gaussianos', 'Canny']",
+        default=list
+    )
+    
+    time_spent_seconds = models.IntegerField(
+        verbose_name="Tiempo Empleado (segundos)",
+        help_text="Tiempo que tardó en completar el cuestionario"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha del intento"
+    )
+    
+    class Meta:
+        db_table = 'quiz_attempt'
+        verbose_name = 'Intento de Cuestionario'
+        verbose_name_plural = 'Intentos de Cuestionarios'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['quiz', 'user']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.quiz.text.title} - Intento #{self.attempt_number} ({self.score}%)"
+    
+    def passed(self):
+        """Verifica si aprobó (score >= 80%)"""
+        return self.score >= 80.0
+    
+    def get_answers(self):
+        """Retorna las respuestas como lista de Python"""
+        return self.answers_json if isinstance(self.answers_json, list) else []
+
+
+class UserProfile(models.Model):
+    """
+    Perfil extendido del usuario con estadísticas de aprendizaje
+    """
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profile',
+        verbose_name="Usuario"
+    )
+    
+    weak_topics = models.JSONField(
+        verbose_name="Temas Débiles Acumulados",
+        help_text="Historial de todos los temas donde ha fallado",
+        default=list
+    )
+    
+    study_streak = models.IntegerField(
+        default=0,
+        verbose_name="Racha de Estudio (días)",
+        help_text="Días consecutivos estudiando"
+    )
+    
+    last_study_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Última Fecha de Estudio"
+    )
+    
+    material_preferences = models.JSONField(
+        verbose_name="Preferencias de Material",
+        help_text="Tipos de material que prefiere el usuario",
+        default=dict
+    )
+    
+    total_study_time_minutes = models.IntegerField(
+        default=0,
+        verbose_name="Tiempo Total de Estudio (minutos)"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de creación"
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última actualización"
+    )
+    
+    class Meta:
+        db_table = 'user_profile'
+        verbose_name = 'Perfil de Usuario'
+        verbose_name_plural = 'Perfiles de Usuarios'
+    
+    def __str__(self):
+        return f"Perfil de {self.user.email}"
+    
+    def update_weak_topics(self, new_weak_topics):
+        """Agrega nuevos temas débiles sin duplicar"""
+        current = set(self.weak_topics)
+        current.update(new_weak_topics)
+        self.weak_topics = list(current)
+        self.save()
+    
+    def add_study_time(self, minutes):
+        """Incrementa el tiempo total de estudio"""
+        self.total_study_time_minutes += minutes
+        self.save()
+
+
+# Signal para crear UserProfile automáticamente cuando se crea un User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    """Crear perfil automáticamente al crear usuario"""
+    if created:
+        UserProfile.objects.create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    """Guardar perfil cuando se guarda usuario"""
+    if hasattr(instance, 'profile'):
+        instance.profile.save()

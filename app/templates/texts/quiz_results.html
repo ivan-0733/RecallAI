@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+
+{% block title %}Resultados del Cuestionario{% endblock %}
+
+{% block body_class %}sidebar-mini layout-fixed{% endblock %}
+
+{% block content %}
+<!-- Navbar -->
+<nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+        <li class="nav-item d-none d-sm-inline-block">
+            <a href="/dashboard/" class="nav-link">
+                <i class="fas fa-arrow-left"></i> Volver al Dashboard
+            </a>
+        </li>
+    </ul>
+</nav>
+
+<!-- Content Wrapper -->
+<div class="content-wrapper" style="margin-left: 0;">
+    <section class="content mt-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-10">
+                    <!-- Resultado general -->
+                    <div class="card" id="resultCard">
+                        <div class="card-body text-center p-5">
+                            <div id="resultIcon" class="mb-3"></div>
+                            <h1 id="resultTitle" class="display-4"></h1>
+                            <h2 id="resultScore" class="display-1 font-weight-bold"></h2>
+                            <p id="resultMessage" class="lead"></p>
+                            
+                            <div class="row mt-4">
+                                <div class="col-md-4">
+                                    <div class="info-box">
+                                        <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
+                                        <div class="info-box-content">
+                                            <span class="info-box-text">Correctas</span>
+                                            <span class="info-box-number" id="correctCount">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="info-box">
+                                        <span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
+                                        <div class="info-box-content">
+                                            <span class="info-box-text">Incorrectas</span>
+                                            <span class="info-box-number" id="incorrectCount">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="info-box">
+                                        <span class="info-box-icon bg-info"><i class="far fa-clock"></i></span>
+                                        <div class="info-box-content">
+                                            <span class="info-box-text">Tiempo</span>
+                                            <span class="info-box-number" id="timeSpent">0 min</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Temas débiles -->
+                    <div id="weakTopicsCard" class="card" style="display: none;">
+                        <div class="card-header bg-warning">
+                            <h3 class="card-title">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                Temas que necesitas reforzar
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <p>Fallaste más en estos temas:</p>
+                            <div id="weakTopicsList"></div>
+                            
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-lightbulb"></i>
+                                <strong>Próximo paso:</strong> Genera material didáctico personalizado para estudiar estos temas.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Respuestas detalladas -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-list"></i>
+                                Revisión Detallada
+                            </h3>
+                        </div>
+                        <div class="card-body" id="detailedAnswers"></div>
+                    </div>
+
+                    <!-- Acciones -->
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <a href="/dashboard/" class="btn btn-primary btn-lg">
+                                <i class="fas fa-home"></i> Ir al Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // ✅ Remover warning de salida al cargar la página
+    window.onbeforeunload = null;
+    
+    let textId;
+
+    $(document).ready(function() {
+        // Obtener ID del texto
+        const pathParts = window.location.pathname.split('/');
+        textId = pathParts[2];
+        
+        // Intentar obtener resultado desde localStorage primero
+        const resultStr = localStorage.getItem('quiz_result');
+        
+        if (resultStr) {
+            // Viene de un quiz recién enviado
+            const result = JSON.parse(resultStr);
+            displayResults(result);
+            localStorage.removeItem('quiz_result');
+        } else {
+            // Viene de "Ver Resultado" en dashboard - cargar desde API
+            loadResultsFromAPI();
+        }
+    });
+
+    function loadResultsFromAPI() {
+        const token = localStorage.getItem('access_token');
+        
+        if (!token) {
+            window.location.href = '/login/';
+            return;
+        }
+        
+        // Mostrar loading
+        $('#resultCard').html(`
+            <div class="card-body text-center p-5">
+                <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
+                <p>Cargando resultados...</p>
+            </div>
+        `);
+        
+        $.ajax({
+            url: `/api/texts/${textId}/last-attempt/`,
+            type: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            success: function(result) {
+                displayResults(result);
+            },
+            error: function(xhr) {
+                if (xhr.status === 404) {
+                    $('#resultCard').html(`
+                        <div class="card-body text-center p-5">
+                            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                            <h4>No se encontraron resultados</h4>
+                            <p>Aún no has tomado este cuestionario.</p>
+                            <a href="/dashboard/" class="btn btn-primary mt-3">
+                                <i class="fas fa-home"></i> Volver al Dashboard
+                            </a>
+                        </div>
+                    `);
+                } else if (xhr.status === 401) {
+                    localStorage.clear();
+                    window.location.href = '/login/';
+                } else {
+                    $('#resultCard').html(`
+                        <div class="card-body text-center p-5">
+                            <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                            <h4>Error al cargar resultados</h4>
+                            <p>Por favor intenta de nuevo.</p>
+                            <a href="/dashboard/" class="btn btn-primary mt-3">
+                                <i class="fas fa-home"></i> Volver al Dashboard
+                            </a>
+                        </div>
+                    `);
+                }
+            }
+        });
+    }
+
+    function displayResults(result) {
+        const passed = result.passed;
+        const score = result.score;
+        
+        // Construir HTML del resultado
+        let resultHTML = `
+            <div class="card-body text-center p-5">
+                ${passed 
+                    ? '<i class="fas fa-trophy fa-5x text-success mb-3"></i><h1 class="display-4 text-success">¡Felicidades! Has aprobado</h1>'
+                    : '<i class="fas fa-times-circle fa-5x text-danger mb-3"></i><h1 class="display-4 text-danger">Necesitas mejorar</h1>'
+                }
+                <h2 class="display-1 font-weight-bold">${score.toFixed(1)}%</h2>
+                <p class="lead">${result.message}</p>
+                
+                <div class="row mt-4">
+                    <div class="col-md-4">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Correctas</span>
+                                <span class="info-box-number">${result.correct_count}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Incorrectas</span>
+                                <span class="info-box-number">${result.total_questions - result.correct_count}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-info"><i class="far fa-clock"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Tiempo</span>
+                                <span class="info-box-number">${Math.floor(result.attempt.time_spent_seconds / 60)}:${String(result.attempt.time_spent_seconds % 60).padStart(2, '0')}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('#resultCard').html(resultHTML);
+        
+        // Temas débiles
+        if (result.weak_topics && result.weak_topics.length > 0) {
+            $('#weakTopicsCard').show();
+            
+            let topicsHtml = '<ul class="list-group">';
+            result.weak_topics.forEach(function(topic) {
+                const errorCount = result.topic_errors[topic] || 0;
+                topicsHtml += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${topic}
+                        <span class="badge badge-danger badge-pill">${errorCount} error(es)</span>
+                    </li>
+                `;
+            });
+            topicsHtml += '</ul>';
+            
+            $('#weakTopicsList').html(topicsHtml);
+        }
+        
+        // Respuestas detalladas
+        let detailedHtml = '';
+        result.detailed_answers.forEach(function(answer, index) {
+            const cardClass = answer.is_correct ? 'border-success' : 'border-danger';
+            const iconClass = answer.is_correct ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+            
+            detailedHtml += `
+                <div class="card mb-3 ${cardClass}">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas ${iconClass}"></i>
+                                Pregunta ${index + 1}
+                            </h5>
+                            <span class="badge badge-info">${answer.topic}</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>${answer.question}</strong></p>
+                        <p>
+                            <strong>Tu respuesta:</strong> 
+                            <span class="${answer.is_correct ? 'text-success' : 'text-danger'}">${answer.selected_answer}</span>
+                        </p>
+                        ${!answer.is_correct ? `
+                            <p><strong>Respuesta correcta:</strong> <span class="text-success">${answer.correct_answer}</span></p>
+                            <div class="alert alert-info">
+                                <strong>Explicación:</strong> ${answer.explanation}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        $('#detailedAnswers').html(detailedHtml);
+    }
+</script>
+{% endblock %}

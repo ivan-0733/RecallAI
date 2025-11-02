@@ -15,3 +15,18 @@ class RegisterView(TemplateView):
 class DashboardView(TemplateView):
     """Vista para dashboard principal"""
     template_name = 'dashboard/dashboard.html'
+
+
+class TextReaderView(TemplateView):
+    """Vista para leer un texto"""
+    template_name = 'texts/text_reader.html'
+
+
+class QuizInterfaceView(TemplateView):
+    """Vista para tomar cuestionario"""
+    template_name = 'texts/quiz_interface.html'
+
+
+class QuizResultsView(TemplateView):
+    """Vista para ver resultados de cuestionario"""
+    template_name = 'texts/quiz_results.html'

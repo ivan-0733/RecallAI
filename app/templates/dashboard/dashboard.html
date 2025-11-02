@@ -180,27 +180,24 @@
                     <div class="card">
                         <div class="card-header">
                             <h3 class="card-title">
-                                <i class="fas fa-hand-wave mr-2"></i>
-                                Bienvenido a RecallAI
+                                <i class="fas fa-book-reader mr-2"></i>
+                                Textos Disponibles
                             </h3>
                         </div>
                         <div class="card-body">
-                            <p class="lead">
-                                ¡Hola <strong id="userNameWelcome"></strong>! 👋
-                            </p>
-                            <p>
-                                Este es tu panel de control donde podrás:
-                            </p>
-                            <ul>
-                                <li>Estudiar textos de Procesamiento Digital de Imágenes</li>
-                                <li>Realizar cuestionarios adaptativos</li>
-                                <li>Recibir material didáctico personalizado generado por IA</li>
-                                <li>Monitorear tu progreso y estadísticas</li>
-                                <li>Mantener tu racha de estudio con el sistema SRS</li>
-                            </ul>
-                            <div class="alert alert-info mt-3">
+                            <div id="textsLoading" class="text-center">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <p>Cargando textos...</p>
+                            </div>
+                            
+                            <div id="textsContainer" class="row" style="display: none;">
+                                <!-- Se llenará dinámicamente con JavaScript -->
+                            </div>
+                            
+                            <div id="noTexts" class="alert alert-info" style="display: none;">
                                 <i class="fas fa-info-circle mr-2"></i>
-                                <strong>Próximamente:</strong> Podrás comenzar a estudiar tus primeros textos.
+                                <strong>No hay textos disponibles aún.</strong>
+                                Los administradores están preparando el contenido.
                             </div>
                         </div>
                     </div>
@@ -244,7 +241,128 @@
             $('#userName').text(user.first_name + ' ' + user.last_name);
             $('#userNameWelcome').text(user.first_name);
         }
+        
+        // Cargar textos disponibles
+        loadTexts();
+        
+        // Cargar estadísticas
+        loadStats();
     });
+
+    // Función para cargar textos
+    function loadTexts() {
+        const token = localStorage.getItem('access_token');
+        
+        $.ajax({
+            url: '/api/texts/',
+            type: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            success: function(response) {
+                $('#textsLoading').hide();
+                
+                if (response.length === 0) {
+                    $('#noTexts').show();
+                } else {
+                    renderTexts(response);
+                    $('#textsContainer').show();
+                }
+            },
+            error: function(xhr) {
+                $('#textsLoading').hide();
+                toastr.error('Error al cargar textos');
+                
+                // Si token expiró, redirigir a login
+                if (xhr.status === 401) {
+                    localStorage.clear();
+                    window.location.href = '/login/';
+                }
+            }
+        });
+    }
+
+    // Función para renderizar textos
+    function renderTexts(texts) {
+            let html = '';
+            
+            texts.forEach(function(text) {
+                const difficultyBadge = getDifficultyBadge(text.difficulty);
+                
+                let attemptedBadge = '';
+                let buttonText = '<i class="fas fa-book-open"></i> Estudiar';
+                let buttonClass = 'btn-primary';
+                
+                if (text.has_been_attempted) {
+                    attemptedBadge = '<span class="badge badge-success">✅ Completado</span>';
+                    buttonText = '<i class="fas fa-eye"></i> Ver Resultado';
+                    buttonClass = 'btn-info';
+                } else {
+                    attemptedBadge = '<span class="badge badge-warning">📝 Pendiente</span>';
+                }
+                
+                html += `
+                    <div class="col-md-4 mb-3">
+                        <div class="card ${text.has_been_attempted ? 'border-success' : ''}">
+                            <div class="card-body">
+                                <h5 class="card-title">${text.title}</h5>
+                                <p class="card-text text-muted">${text.description || 'Sin descripción'}</p>
+                                
+                                <div class="mb-2">
+                                    <span class="badge badge-primary">${text.topic}</span>
+                                    ${difficultyBadge}
+                                    ${attemptedBadge}
+                                </div>
+                                
+                                <div class="text-muted small mb-3">
+                                    <i class="far fa-clock"></i> ${text.estimated_time_minutes} min
+                                    <i class="fas fa-font ml-2"></i> ${text.word_count} palabras
+                                </div>
+                                
+                                ${text.has_been_attempted 
+                                    ? `<a href="/quiz/${text.id}/results/" class="btn ${buttonClass} btn-block">${buttonText}</a>`
+                                    : `<a href="/text/${text.id}/" class="btn ${buttonClass} btn-block">${buttonText}</a>`
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            $('#textsContainer').html(html);
+        }
+
+    // Helper para badge de dificultad
+    function getDifficultyBadge(difficulty) {
+        const badges = {
+            'beginner': '<span class="badge badge-success">Principiante</span>',
+            'intermediate': '<span class="badge badge-warning">Intermedio</span>',
+            'advanced': '<span class="badge badge-danger">Avanzado</span>'
+        };
+        return badges[difficulty] || '';
+    }
+
+    // Función para cargar estadísticas
+    function loadStats() {
+        const token = localStorage.getItem('access_token');
+        
+        $.ajax({
+            url: '/api/attempts/stats/',
+            type: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            success: function(stats) {
+                // Actualizar info boxes
+                $('.info-box-number').eq(0).text(stats.texts_studied);
+                $('.info-box-number').eq(1).text(stats.total_attempts);
+                $('.info-box-number').eq(3).text(stats.study_streak + ' días');
+            },
+            error: function(xhr) {
+                console.log('Error al cargar estadísticas');
+            }
+        });
+    }
 
     // Logout
     $('#logoutBtn').on('click', function(e) {
