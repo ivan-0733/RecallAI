@@ -1,5 +1,7 @@
 volumes:
   local_postgres_data: {}
+  redis_data: {}
+
 services:
   api:
     build: .
@@ -11,9 +13,11 @@ services:
       - "8010:8000"
     depends_on:
       - db
+      - redis
     stdin_open: true
     tty: true
     restart: on-failure
+
   db:
     restart: on-failure
     image: postgres:16
@@ -21,3 +25,35 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - local_postgres_data:/var/lib/postgresql/data:Z
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: on-failure
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+
+  celery_worker:
+    build: .
+    command: bash -c "cd /code/app && celery -A app worker -l info"
+    volumes:
+      - .:/code
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+    restart: on-failure
+
+  celery_beat:
+    build: .
+    command: bash -c "cd /code/app && celery -A app beat -l info"
+    volumes:
+      - .:/code
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+    restart: on-failure

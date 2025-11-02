@@ -11,7 +11,15 @@ gunicorn==20.1.0
 watchdog==4.0.1
 whitenoise==6.7.0
 psycopg2==2.9.10
-google-generativeai==0.3.2
+
+# IA y procesamiento de PDFs - VERSIONES COMPATIBLES
+google-generativeai==0.7.2
 celery==5.3.4
 redis==5.0.1
 bleach==6.1.0
+PyPDF2==3.0.1
+pdfplumber==0.11.0
+
+# Langchain - Sin versiones fijas de core/community (se instalan automáticamente)
+langchain==0.2.7
+langchain-google-genai==1.0.10

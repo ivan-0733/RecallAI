@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "simple_history",
     # Local Apps
     "apps.application_user",
+    "apps.pdi_texts",  # ← AGREGAR ESTA LÍNEA
 ]
 
 MIDDLEWARE = [
@@ -238,6 +239,16 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
 }
+
+# Celery Configuration
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'America/Mexico_City'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos max por tarea
 
 # Gemini API Configuration
 GEMINI_API_KEY = "AIzaSyB7TQhKpt8MX8X7gH6gSQdFQwovgtf5v1k"
