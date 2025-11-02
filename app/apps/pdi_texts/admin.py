@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from django.urls import reverse
+from django.urls import reverse, path
 from django.contrib import messages
+from django.http import JsonResponse
+from django.shortcuts import redirect
 from apps.pdi_texts.models import PDIText, InitialQuiz
 from apps.pdi_texts.tasks import generate_initial_quiz
 from apps.pdi_texts.utils import (
@@ -45,7 +47,7 @@ class PDITextAdmin(admin.ModelAdmin):
         }),
         ('📄 Contenido', {
             'fields': ('file', 'content', 'content_preview'),
-            'description': 'Sube un PDF/TXT o pega el contenido manualmente'
+            'description': 'Sube un PDF/TXT o pega el contenido manualmente. Si subes archivo, el contenido se extraerá automáticamente.'
         }),
         ('⏱️ Estimaciones', {
             'fields': ('estimated_time_minutes', 'word_count_display')
@@ -66,6 +68,67 @@ class PDITextAdmin(admin.ModelAdmin):
         'generate_quizzes',
         'regenerate_quizzes'
     ]
+    
+    class Media:
+        js = ('admin/js/pdi_text_admin.js',)
+    
+    def get_urls(self):
+        """Agregar URL personalizada para generar quiz vía AJAX"""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<int:text_id>/generate-quiz/',
+                self.admin_site.admin_view(self.generate_quiz_view),
+                name='pdi_texts_pditext_generate_quiz',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def generate_quiz_view(self, request, text_id):
+        """Vista para generar quiz vía AJAX - Funciona igual que la acción masiva"""
+        try:
+            text = PDIText.objects.get(id=text_id)
+            
+            # Verificar si ya tiene contenido
+            if not text.content or text.content.strip() == "":
+                return JsonResponse({
+                    'status': 'error',
+                    'message': '❌ El texto no tiene contenido. Primero debes guardar el texto con contenido.'
+                }, status=400)
+            
+            # Verificar si ya tiene quiz
+            if hasattr(text, 'initial_quiz'):
+                return JsonResponse({
+                    'status': 'error',
+                    'message': '⚠️ Este texto ya tiene un cuestionario. Usa "RE-generar" si quieres crear uno nuevo.'
+                }, status=400)
+            
+            # Encolar tarea Celery (IGUAL QUE LA ACCIÓN MASIVA)
+            generate_initial_quiz.delay(text_id)
+            
+            # Mostrar mensaje en el admin (IGUAL QUE LA ACCIÓN MASIVA)
+            self.message_user(
+                request,
+                f"🚀 Se encoló la tarea para generar cuestionario de '{text.title}'. Esto puede tomar varios minutos.",
+                messages.SUCCESS
+            )
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': f'🚀 Generando cuestionario para "{text.title}"... Esto puede tomar varios minutos.',
+                'reload': True  # ✅ NUEVO: indica al JS que debe recargar
+            })
+            
+        except PDIText.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': '❌ Texto no encontrado'
+            }, status=404)
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'❌ Error: {str(e)}'
+            }, status=500)
     
     def save_model(self, request, obj, form, change):
         """Al guardar, procesar archivo si se subió uno"""
@@ -105,6 +168,21 @@ class PDITextAdmin(admin.ModelAdmin):
                     request,
                     f"❌ Error al procesar archivo: {str(e)}",
                     messages.ERROR
+                )
+        
+        # Validar que tenga contenido antes de guardar
+        if not obj.content or obj.content.strip() == "":
+            if obj.file:
+                self.message_user(
+                    request,
+                    "⚠️ No se pudo extraer texto del archivo. Verifica que sea un PDF/TXT válido.",
+                    messages.WARNING
+                )
+            else:
+                self.message_user(
+                    request,
+                    "⚠️ Debes proporcionar contenido o subir un archivo PDF/TXT.",
+                    messages.WARNING
                 )
         
         super().save_model(request, obj, form, change)
@@ -192,30 +270,38 @@ class PDITextAdmin(admin.ModelAdmin):
         """Columna con botones de acción"""
         buttons = []
         
-        # Ver detalle
+        # Ver/Editar texto
         view_url = reverse('admin:pdi_texts_pditext_change', args=[obj.pk])
         buttons.append(
-            f'<a href="{view_url}" class="btn btn-sm btn-primary" title="Ver/Editar">'
+            f'<a href="{view_url}" class="btn btn-sm btn-primary" title="Ver/Editar Texto">'
             '<i class="fas fa-edit"></i></a>'
         )
         
-        # Generar quiz si no tiene
+        # Botón de Quiz
         if not obj.has_quiz:
+            # Si NO tiene quiz: Botón para GENERAR
+            generate_url = reverse('admin:pdi_texts_pditext_generate_quiz', args=[obj.pk])
             buttons.append(
-                f'<a href="#" onclick="generateQuiz({obj.pk}); return false;" '
-                f'class="btn btn-sm btn-success" title="Generar Cuestionario">'
-                '<i class="fas fa-plus-circle"></i> Quiz</a>'
+                f'<a href="javascript:void(0);" onclick="generateQuiz({obj.pk}, \'{generate_url}\');" '
+                f'class="btn btn-sm btn-success" title="Generar Cuestionario" id="quiz-btn-{obj.pk}">'
+                '<i class="fas fa-plus-circle"></i> Generar Quiz</a>'  # ✅ CAMBIO AQUÍ: "Quiz" → "Generar Quiz"
             )
         else:
-            # Ver quiz
+            # Si YA tiene quiz: Botón para VER (redirige al quiz) - NO TOCAR
             try:
                 quiz_url = reverse('admin:pdi_texts_initialquiz_change', args=[obj.initial_quiz.pk])
                 buttons.append(
-                    f'<a href="{quiz_url}" class="btn btn-sm btn-info" title="Ver Cuestionario">'
-                    '<i class="fas fa-clipboard-list"></i></a>'
+                    f'<a href="{quiz_url}" class="btn btn-sm btn-info" title="Ver Cuestionario Generado">'
+                    '<i class="fas fa-clipboard-list"></i> <span class="d-none d-lg-inline">Ver Quiz</span></a>'
                 )
-            except:
-                pass
+            except Exception as e:
+                # Si hay error al obtener el quiz
+                generate_url = reverse('admin:pdi_texts_pditext_generate_quiz', args=[obj.pk])
+                buttons.append(
+                    f'<a href="javascript:void(0);" onclick="generateQuiz({obj.pk}, \'{generate_url}\');" '
+                    f'class="btn btn-sm btn-warning" title="Regenerar Cuestionario (error detectado)" id="quiz-btn-{obj.pk}">'
+                    '<i class="fas fa-exclamation-triangle"></i> Re-generar</a>'
+                )
         
         return format_html(' '.join(buttons))
     actions_column.short_description = 'Acciones'
@@ -255,20 +341,36 @@ class PDITextAdmin(admin.ModelAdmin):
         
         count = 0
         for text in texts_without_quiz:
-            generate_initial_quiz.delay(text.id)
-            count += 1
+            if text.content and text.content.strip():
+                generate_initial_quiz.delay(text.id)
+                count += 1
+            else:
+                self.message_user(
+                    request,
+                    f"⚠️ '{text.title}' no tiene contenido, se omitió",
+                    messages.WARNING
+                )
         
-        self.message_user(
-            request,
-            f"🚀 Se encolaron {count} tarea(s) para generar cuestionarios. Esto puede tomar varios minutos.",
-            messages.SUCCESS
-        )
+        if count > 0:
+            self.message_user(
+                request,
+                f"🚀 Se encolaron {count} tarea(s) para generar cuestionarios. Esto puede tomar varios minutos.",
+                messages.SUCCESS
+            )
     generate_quizzes.short_description = "🚀 Generar cuestionarios (textos sin quiz)"
     
     def regenerate_quizzes(self, request, queryset):
         """Regenerar cuestionarios (elimina el existente)"""
         count = 0
         for text in queryset:
+            if not text.content or text.content.strip() == "":
+                self.message_user(
+                    request,
+                    f"⚠️ '{text.title}' no tiene contenido, se omitió",
+                    messages.WARNING
+                )
+                continue
+            
             # Eliminar quiz existente si lo hay
             if hasattr(text, 'initial_quiz'):
                 text.initial_quiz.delete()
@@ -279,11 +381,12 @@ class PDITextAdmin(admin.ModelAdmin):
             generate_initial_quiz.delay(text.id)
             count += 1
         
-        self.message_user(
-            request,
-            f"🔄 Se encolaron {count} tarea(s) para RE-generar cuestionarios.",
-            messages.WARNING
-        )
+        if count > 0:
+            self.message_user(
+                request,
+                f"🔄 Se encolaron {count} tarea(s) para RE-generar cuestionarios.",
+                messages.WARNING
+            )
     regenerate_quizzes.short_description = "🔄 RE-generar cuestionarios (sobrescribe existentes)"
 
 

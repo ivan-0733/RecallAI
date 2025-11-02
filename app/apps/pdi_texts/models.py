@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from apps.application_user.models import User
 
 
@@ -35,7 +37,9 @@ class PDIText(models.Model):
     
     content = models.TextField(
         verbose_name="Contenido",
-        help_text="Contenido completo extraído del PDF/TXT"
+        help_text="Contenido completo extraído del PDF/TXT",
+        blank=True,  
+        default="" 
     )
     
     file = models.FileField(
@@ -119,6 +123,8 @@ class PDIText(models.Model):
     
     def word_count(self):
         """Cuenta palabras del contenido"""
+        if not self.content:
+            return 0
         return len(self.content.split())
     
     def activate(self):
@@ -211,3 +217,16 @@ class InitialQuiz(models.Model):
                 return False, f"Pregunta {i+1} debe tener al menos 2 opciones"
         
         return True, "Estructura válida"
+    
+
+@receiver(post_delete, sender=InitialQuiz)
+def update_text_quiz_flag_on_delete(sender, instance, **kwargs):
+    """
+    Cuando se elimina un quiz, actualizar el flag has_quiz del texto a False
+    """
+    try:
+        text = instance.text
+        text.has_quiz = False
+        text.save(update_fields=['has_quiz'])
+    except PDIText.DoesNotExist:
+        pass

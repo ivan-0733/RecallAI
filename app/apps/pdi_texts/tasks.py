@@ -103,13 +103,13 @@ IMPORTANTE:
 """
         
         # Llamar a Gemini Pro
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-pro')
         
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=8000,
+                max_output_tokens=16384,
             )
         )
         
@@ -156,7 +156,7 @@ IMPORTANTE:
             total_questions=len(questions),
             generation_prompt=prompt[:1000],  # Guardar solo primeros 1000 chars
             generation_time_seconds=generation_time,
-            model_used='gemini-1.5-flash'
+            model_used='gemini-2.5-pro'
         )
         
         # Actualizar flag en texto
