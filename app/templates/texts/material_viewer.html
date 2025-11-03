@@ -79,17 +79,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 
     <script>
-        let materialData = null;
-        // Asumimos que el ID en la URL es el 'material_request_id'
-        const materialRequestId = window.location.pathname.split('/')[2]; 
-        let pollInterval; // Variable para guardar el intervalo de sondeo
+    let materialData = null;
+        // Este es el ID del UserDidacticMaterial (ej: 21)
+        const materialId = window.location.pathname.split('/')[2]; 
 
         $(document).ready(function() {
-            // Iniciar el sondeo
-            checkMaterialStatus();
+            // Iniciar la carga directa del material
+            loadMaterial();
         });
 
-        function checkMaterialStatus() {
+        function loadMaterial() {
             const token = localStorage.getItem('access_token');
 
             if (!token) {
@@ -97,61 +96,34 @@
                 return;
             }
 
-            // --- ¡AQUÍ ESTÁ LA MAGIA! ---
-            // 1. Llamamos al nuevo endpoint que creamos en views.py
-            // 2. Usamos el ID de la URL como 'request_id'
-            // 3. Añadimos el 'cache-buster' ( ?_=${new Date().getTime()} )
-            const uniqueUrl = `/api/texts/material-status/?request_id=${materialRequestId}&_=${new Date().getTime()}`;
+            // Llamamos al nuevo endpoint que creamos: /api/materials/{id}/
+            const apiUrl = `/api/materials/${materialId}/`;
 
             $.ajax({
-                url: uniqueUrl, // Usamos la URL única y correcta
+                url: apiUrl,
                 type: 'GET',
                 headers: {
                     'Authorization': 'Bearer ' + token
                 },
-                success: function(response) {
-                    if (response.status === 'completed') {
-                        // ¡Material listo!
-                        // Detenemos el sondeo
-                        if (pollInterval) clearInterval(pollInterval);
-                        
-                        // Obtenemos los datos completos del material y lo mostramos
-                        materialData = response.material;
-                        displayMaterial(materialData);
-
-                    } else if (response.status === 'failed') {
-                        // La generación falló
-                        if (pollInterval) clearInterval(pollInterval);
-                        toastr.error('La generación del material falló. Por favor, inténtalo de nuevo.');
-                        $('#loadingText').text('Error al generar el material.');
-                        // Opcional: redirigir
-                        // setTimeout(() => window.location.href = '/dashboard/', 3000);
-
-                    } else {
-                        // Sigue en 'processing'
-                        // Si aún no hemos configurado el intervalo, lo configuramos ahora
-                        // para que pregunte cada 5 segundos.
-                        if (!pollInterval) {
-                            pollInterval = setInterval(checkMaterialStatus, 5000); // 5000ms = 5 segundos
-                        }
-                        console.log('Material status: processing. Volviendo a preguntar en 5s...');
-                    }
+                success: function(material) {
+                    // ¡Material encontrado!
+                    // Detenemos el spinner y mostramos el contenido
+                    materialData = material;
+                    displayMaterial(materialData);
                 },
                 error: function(xhr) {
+                    // Manejar errores
                     if (xhr.status === 401) {
-                        if (pollInterval) clearInterval(pollInterval);
                         localStorage.clear();
                         window.location.href = '/login/';
                     } else if (xhr.status === 404) {
-                         // Esto es normal si la página carga antes que el registro en BD
-                         console.log('MaterialRequest not found yet, retrying...');
-                         if (!pollInterval) {
-                            pollInterval = setInterval(checkMaterialStatus, 5000);
-                        }
+                        toastr.error('Material no encontrado.');
+                        $('#loadingSpinner').show(); // Asegurarse que el spinner esté visible
+                        $('#loadingText').text('Este material no existe o no te pertenece.');
                     } else {
-                        if (pollInterval) clearInterval(pollInterval);
-                        toastr.error('Error al verificar el estado del material.');
-                        $('#loadingText').text('Error al cargar el material.');
+                        toastr.error('Error al cargar el material.');
+                        $('#loadingSpinner').show();
+                        $('#loadingText').text('Ocurrió un error inesperado al cargar el material.');
                     }
                 }
             });

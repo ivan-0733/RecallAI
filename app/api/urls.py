@@ -12,7 +12,8 @@ from api.views import (
 from apps.pdi_texts.views import (
     PDITextViewSet,
     QuizAttemptViewSet,
-    UserProfileViewSet
+    UserProfileViewSet,
+    UserDidacticMaterialViewSet
 )
 
 app_name = 'api'
@@ -22,6 +23,7 @@ router = DefaultRouter()
 router.register(r'texts', PDITextViewSet, basename='texts')
 router.register(r'attempts', QuizAttemptViewSet, basename='attempts')
 router.register(r'profile', UserProfileViewSet, basename='user-profile')
+router.register(r'materials', UserDidacticMaterialViewSet, basename='materials')
 
 urlpatterns = [
     # Autenticación (API REST)

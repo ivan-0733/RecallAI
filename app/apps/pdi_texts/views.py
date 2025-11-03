@@ -11,11 +11,6 @@ from datetime import timedelta
 from apps.pdi_texts.recommendation import get_recommended_material
 from apps.pdi_texts.tasks_material import generate_didactic_material
 from apps.pdi_texts.models import MaterialRequest, UserDidacticMaterial
-from apps.pdi_texts.serializers import (
-    MaterialRecommendationSerializer,
-    MaterialGenerateRequestSerializer,
-    UserDidacticMaterialSerializer
-)
 
 from apps.pdi_texts.models import PDIText, InitialQuiz, QuizAttempt, UserProfile
 from apps.pdi_texts.serializers import (
@@ -24,7 +19,10 @@ from apps.pdi_texts.serializers import (
     InitialQuizSerializer,
     QuizSubmissionSerializer,
     QuizAttemptSerializer,
-    UserProfileSerializer
+    UserProfileSerializer,
+    MaterialRecommendationSerializer,
+    MaterialGenerateRequestSerializer,
+    UserDidacticMaterialSerializer
 )
 
 
@@ -517,3 +515,15 @@ class UserProfileViewSet(viewsets.ReadOnlyModelViewSet):
         profile = request.user.profile
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
+
+class UserDidacticMaterialViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet para ver y obtener materiales didácticos generados
+    GET /api/materials/{id}/
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserDidacticMaterialSerializer
+    
+    def get_queryset(self):
+        """Solo materiales del usuario actual"""
+        return UserDidacticMaterial.objects.filter(user=self.request.user)
