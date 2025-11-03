@@ -386,6 +386,61 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         
         serializer = UserDidacticMaterialSerializer(materials, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='material-status')
+    def get_material_status(self, request):
+        """
+        Consulta el estado de una solicitud de material.
+        Usado por el frontend para sondear (polling).
+        GET /api/texts/material-status/?request_id=123
+        """
+        request_id = request.query_params.get('request_id')
+        if not request_id:
+            return Response(
+                {'error': 'Se requiere request_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Usar get_object_or_404 para manejar el 'No Encontrado'
+            material_request = get_object_or_404(
+                MaterialRequest, 
+                id=request_id, 
+                user=request.user
+            )
+            
+            if material_request.status == 'completed':
+                # ¡Material listo! Serializar y devolver el UserDidacticMaterial
+                material = material_request.generated_material
+                
+                if not material:
+                    # Esto no debería pasar si el estado es 'completado', pero por si acaso
+                    return Response({
+                        'status': 'failed', 
+                        'error': 'El servidor completó la tarea pero no pudo enlazar el material.'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                # Usamos el serializer que ya tienes
+                serializer = UserDidacticMaterialSerializer(material)
+                return Response({
+                    'status': 'completed',
+                    'material': serializer.data
+                })
+            
+            elif material_request.status == 'failed':
+                return Response({'status': 'failed'})
+            
+            else:
+                # Sigue en 'pending' o 'processing'
+                return Response({'status': 'processing'})
+                
+        except MaterialRequest.DoesNotExist:
+            # Esto pasa si el frontend carga antes que la BD cree el registro
+            # El frontend lo interpretará como 'processing'
+            return Response(
+                {'status': 'processing', 'detail': 'Request not found yet, still processing.'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class QuizAttemptViewSet(viewsets.ReadOnlyModelViewSet):

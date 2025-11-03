@@ -43,6 +43,8 @@ services:
     volumes:
       - .:/code
     env_file: .env
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
     depends_on:
       - db
       - redis
