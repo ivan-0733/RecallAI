@@ -472,6 +472,7 @@
         $.ajax({
             url: '/api/texts/my-materials/',
             type: 'GET',
+            cache: false,
             headers: {
                 'Authorization': 'Bearer ' + token
             },
@@ -479,6 +480,7 @@
                 // Buscar el material más reciente del tipo solicitado
                 const latestMaterial = materials.find(m => 
                     m.material_type === materialType && 
+                    m.text === parseInt(textId) &&
                     m.generated_at !== null
                 );
                 

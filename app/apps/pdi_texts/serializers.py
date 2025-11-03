@@ -306,6 +306,7 @@ class UserDidacticMaterialSerializer(serializers.ModelSerializer):
         model = UserDidacticMaterial
         fields = [
             'id',
+            'text',
             'text_title',
             'material_type',
             'material_type_display',
