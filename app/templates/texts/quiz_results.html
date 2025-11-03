@@ -98,6 +98,9 @@
                             <a href="/dashboard/" class="btn btn-primary btn-lg">
                                 <i class="fas fa-home"></i> Ir al Dashboard
                             </a>
+                            <a href="#" id="goToMaterialBtn" class="btn btn-warning btn-lg ml-2">
+                                <i class="fas fa-lightbulb"></i> Generar Material Didáctico
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -118,6 +121,8 @@
     $(document).ready(function() {
         const pathParts = window.location.pathname.split('/');
         textId = pathParts[2];
+
+        $('#goToMaterialBtn').attr('href', `/materials/history/${textId}/`);
         
         const resultStr = localStorage.getItem('quiz_result');
         
@@ -252,12 +257,39 @@
             $('#weakTopicsList').html(topicsHtml);
         }
         
-        // ✅ RESTAURADO: Respuestas detalladas
+        // ✅ MODIFICADO: Respuestas detalladas con opciones
         let detailedHtml = '';
         result.detailed_answers.forEach(function(answer, index) {
             const cardClass = answer.is_correct ? 'border-success' : 'border-danger';
             const iconClass = answer.is_correct ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
-            
+
+            // --- INICIO: Lógica para opciones ---
+            let optionsHtml = '<ul class="list-group list-group-flush">';
+            if (answer.opciones && Array.isArray(answer.opciones)) {
+                answer.opciones.forEach(function(opcion) {
+                    const optionLetter = opcion.substring(0, 1); // "A", "B", "C", "D"
+                    
+                    let liClass = 'list-group-item';
+                    let icon = '';
+                    let optionText = opcion; // Texto por defecto
+
+                    if (optionLetter === answer.correct_answer) {
+                        // Es la respuesta correcta (siempre verde)
+                        optionText = `<strong class="text-success">${opcion}</strong>`;
+                        icon = ' <i class="fas fa-check-circle text-success ml-2"></i>';
+                    
+                    } else if (optionLetter === answer.selected_answer && !answer.is_correct) {
+                        // Es la respuesta incorrecta que seleccionó (rojo)
+                        optionText = `<strong class="text-danger">${opcion}</strong>`;
+                        icon = ' <i class="fas fa-times-circle text-danger ml-2"></i>';
+                    }
+
+                    optionsHtml += `<li class="${liClass}">${optionText}${icon}</li>`;
+                });
+            }
+            optionsHtml += '</ul>';
+            // --- FIN: Lógica para opciones ---
+
             detailedHtml += `
                 <div class="card mb-3 ${cardClass}">
                     <div class="card-header">
@@ -271,13 +303,13 @@
                     </div>
                     <div class="card-body">
                         <p><strong>${answer.question}</strong></p>
-                        <p>
-                            <strong>Tu respuesta:</strong> 
-                            <span class="${answer.is_correct ? 'text-success' : 'text-danger'}">${answer.selected_answer}</span>
-                        </p>
+                        
+                        <div class="mb-3">
+                            ${optionsHtml}
+                        </div>
+
                         ${!answer.is_correct ? `
-                            <p><strong>Respuesta correcta:</strong> <span class="text-success">${answer.correct_answer}</span></p>
-                            <div class="alert alert-info">
+                            <div class="alert alert-info mt-3">
                                 <strong>Explicación:</strong> ${answer.explanation}
                             </div>
                         ` : ''}

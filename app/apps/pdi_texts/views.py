@@ -130,6 +130,17 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Reconstruir el resultado completo
         detailed_answers = last_attempt.answers_json
+
+        for answer_detail in detailed_answers:
+                if 'opciones' not in answer_detail:
+                    try:
+                        question_index = answer_detail['question_index']
+                        if 0 <= question_index < len(questions):
+                            original_question = questions[question_index]
+                            answer_detail['opciones'] = original_question.get('opciones', [])
+                    except (KeyError, IndexError, TypeError):
+                        # Si algo falla, solo añade una lista vacía
+                        answer_detail['opciones'] = []
         
         # Agrupar errores por tema
         from collections import Counter
@@ -216,6 +227,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             detailed_answers.append({
                 'question_index': question_index,
                 'question': question.get('pregunta'),
+                'opciones': question.get('opciones', []),
                 'selected_answer': selected_answer,
                 'correct_answer': correct_answer,
                 'is_correct': is_correct,
