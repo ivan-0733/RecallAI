@@ -263,7 +263,7 @@
                         
                         // ✅ USAR PDF.JS DE MOZILLA (evita problemas de X-Frame-Options)
                         // Sin toolbar + zoom ajustado + página completa
-                        const viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#toolbar=0&zoom=page-width`;
+                        const viewerUrl = `/static/pdfjs/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#toolbar=0&zoom=page-width`;
                         $('#pdfFrame').attr('src', viewerUrl);
                         
                         // Detectar cuando carga
@@ -358,7 +358,7 @@
                 
                 // Usar PDF.js viewer
                 // Sin toolbar + zoom ajustado + página completa
-                const viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#toolbar=0&zoom=page-width`;
+                const viewerUrl = `/static/pdfjs/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#toolbar=0&zoom=page-width`;
                 $('#pdfFrame').attr('src', viewerUrl);
                 
                 $('#pdfViewer').show();

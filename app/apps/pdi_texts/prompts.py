@@ -1,84 +1,140 @@
 def get_flashcard_prompt(text_title, text_topic, weak_topics, incorrect_questions_text, text_content_preview):
-    """Prompt para Flashcards interactivas"""
+    """
+    Prompt para Flashcards interactivas con estilo minimalista de élite y cabecera de temas.
+    """
     
-    weak_topics_str = ', '.join(weak_topics[:3]) if weak_topics else 'temas generales'
+    # Preparamos los temas débiles para el prompt.
+    # Usamos los 3 principales, o el tema general si no hay.
+    topic_1 = weak_topics[0] if weak_topics else text_topic
+    topic_2 = weak_topics[1] if len(weak_topics) > 1 else topic_1
+    topic_3 = weak_topics[2] if len(weak_topics) > 2 else topic_2
     
-    return f"""Eres un experto pedagogo en Procesamiento Digital de Imágenes con 15 años de experiencia.
+    # Creamos un string con los temas débiles para el cabecero
+    weak_topics_str_list = ', '.join([f"'{t}'" for t in weak_topics[:3]])
+
+    # NOTA: El bloque <style> al final de este f-string tiene llaves dobles {{ }} para escapar el CSS.
+    return f"""Eres un experto diseñador UI/UX y un pedagogo de élite especializado en Procesamiento Digital de Imágenes. Tu estándar de calidad es el más alto.
+
+TAREA PRINCIPAL:
+Tu tarea es generar un HTML completo para una sesión de estudio interactiva. Este HTML debe ser EXTREMADAMENTE bonito, elegante, limpio y minimalista, aunque requiera mucho HTML y CSS inline.
+
+El HTML debe tener DOS (2) partes:
+1. Un cabecero de 'Temas de Enfoque' (Weak Topics) con un diseño premium.
+2. Un 'grid' de 15 flashcards minimalistas que se voltean suavemente.
 
 CONTEXTO DEL ALUMNO:
-- Texto: "{text_title}"
-- Tema: {text_topic}
-- Temas donde MÁS falló: {weak_topics_str}
-- El alumno ELIGIÓ estudiar con Flashcards
+- Texto Estudiado: "{text_title}"
+- Tema Principal: {text_topic}
+- Temas donde MÁS falló (Weak Topics): {weak_topics_str_list}
+- Errores específicos: {incorrect_questions_text[:800]}
 
-CONTENIDO DEL TEXTO:
-{text_content_preview[:2000]}
+INSTRUCCIONES DE CALIDAD (CRÍTICO Y OBLIGATORIO):
+- ¡NO TE LIMITES POR LA CANTIDAD DE TOKENS! La calidad del diseño, la precisión de la información y la estructura impecable son tu única prioridad. Puedes usar todos los tokens que necesites. No resumas si la explicación requiere detalle.
+- ¡VALIDACIÓN MÚLTIPLE! Valida tu salida múltiples veces. El HTML y CSS no deben romperse, ni superponerse, ni salirse de los márgenes. El diseño debe ser perfecto y estable. La alineación y el espaciado deben ser impecables.
+- REDACCIÓN: La redacción debe ser profesional, clara y experta.
+- CSS: Usa CSS 100% inline, excepto la animación `.flipped` que irá en una etiqueta `<style>`.
 
-ERRORES DEL ALUMNO:
-{incorrect_questions_text[:800]}
+---
+PARTE 1: CABECERO DE TEMAS DE ENFOQUE (Weak Topics)
+---
+Primero, genera este cabecero. Debe ser elegante y destacar los temas a reforzar.
 
-TAREA:
-Genera 15 flashcards interactivas en HTML puro (solo inline CSS/JS).
-
-DISTRIBUCIÓN:
-- 9 flashcards: "{weak_topics[0] if weak_topics else text_topic}" (60%)
-- 4 flashcards: "{weak_topics[1] if len(weak_topics) > 1 else text_topic}" (25%)
-- 2 flashcards: "{weak_topics[2] if len(weak_topics) > 2 else text_topic}" (15%)
-
-ESTRUCTURA DE CADA FLASHCARD:
+ESTRUCTURA DEL CABECERO (HTML):
 ```html
-<div class="flashcard" onclick="this.classList.toggle('flipped')" style="width: 100%; max-width: 600px; height: 350px; margin: 20px auto; perspective: 1000px; cursor: pointer;">
-    <div class="flashcard-inner" style="position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d;">
-        <div class="flashcard-front" style="position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 30px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);">
-            <h3 style="color: white; font-size: 22px; text-align: center; margin: 0 0 20px 0;">[PREGUNTA CLARA Y DIRECTA]</h3>
-            <p style="color: rgba(255,255,255,0.8); font-size: 14px; text-align: center; margin-top: auto;">💡 Pista: [PISTA SUTIL]</p>
-            <p style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 10px;">👆 Haz clic para ver la respuesta</p>
+<div class="weak-topics-header" style="background: linear-gradient(135deg, #f5f7fa 0%, #eef2ff 100%); border: 1px solid #dcdfe6; padding: 25px 30px; border-radius: 18px; margin-bottom: 40px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); font-family: 'Segoe UI', sans-serif;">
+    <h3 style="margin: 0 0 18px 0; font-size: 20px; font-weight: 600; color: #333d4b;">Tus Áreas de Enfoque Personalizadas</h3>
+    <div class="topics-container" style="display: flex; flex-wrap: wrap; gap: 12px;">
+        <span style="background: #ffffff; border: 1px solid #dcdfe6; color: #c53030; font-weight: 500; padding: 8px 16px; border-radius: 20px; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 1.2em;">⚠️</span> {topic_1}
+        </span>
+        <span style="background: #ffffff; border: 1px solid #dcdfe6; color: #dd6b20; font-weight: 500; padding: 8px 16px; border-radius: 20px; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 1.2em;">⚠️</span> {topic_2}
+        </span>
+        <span style="background: #ffffff; border: 1px solid #dcdfe6; color: #5a67d8; font-weight: 500; padding: 8px 16px; border-radius: 20px; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 1.2em;">⚠️</span> {topic_3}
+        </span>
         </div>
-        <div class="flashcard-back" style="position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: white; border-radius: 15px; padding: 30px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); transform: rotateY(180deg); overflow-y: auto;">
-            <h4 style="color: #667eea; margin-top: 0;">✅ Respuesta:</h4>
-            <p style="font-size: 16px; line-height: 1.6; color: #333;">[EXPLICACIÓN EN 2-3 LÍNEAS]</p>
+</div>
+PARTE 2: GRID DE FLASHCARDS MINIMALISTAS (15 tarjetas)
+Segundo, después del cabecero, genera un grid con 15 flashcards.
+DISTRIBUCIÓN DE TEMAS (OBLIGATORIA):
+
+9 flashcards sobre: "{topic_1}" (El tema MÁS débil)
+4 flashcards sobre: "{topic_2}"
+2 flashcards sobre: "{topic_3}"
+ESTRUCTURA DEL GRID (HTML):
+HTML
+
+<div class="flashcard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; perspective: 1800px;">
+ESTRUCTURA DE CADA FLASHCARD (HTML):
+Usa esta plantilla exacta para CADA una de las 15 flashcards. ¡El diseño es crucial!
+HTML
+
+    <div class="flashcard" onclick="this.classList.toggle('flipped')" style="width: 100%; height: 380px; cursor: pointer; font-family: 'Segoe UI', sans-serif;">
+        <div class="flashcard-inner" style="position: relative; width: 100%; height: 100%; transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); transform-style: preserve-3d;">
             
-            <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #667eea;">
-                <h5 style="color: #667eea; margin: 0 0 10px 0;">📝 Ejemplo:</h5>
-                <code style="display: block; background: #2d3748; color: #68d391; padding: 10px; border-radius: 5px; font-size: 13px;">[CÓDIGO PYTHON]</code>
+            <div class="flashcard-front" style="position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; padding: 25px 30px;">
+                <div>
+                    <span style="font-size: 13px; font-weight: 600; color: #667eea; background: #eef2ff; padding: 6px 12px; border-radius: 15px; display: inline-block;">
+                        [TEMA DE LA TARJETA (Ej: {topic_1})]
+                    </span>
+                </div>
+                <h3 style="font-size: 22px; font-weight: 600; color: #2d3748; text-align: left; margin: 20px 0; line-height: 1.4;">
+                    [CONCEPTO, TÉRMINO o PREGUNTA CLAVE. Debe ser conciso pero claro.]
+                </h3>
+                <p style="font-size: 13px; color: #a0aec0; text-align: left; margin-top: auto; font-weight: 500;">
+                    Haz clic para ver la explicación
+                </p>
             </div>
             
-            <div style="background: #fff5f5; padding: 12px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #fc8181;">
-                <p style="margin: 0; font-size: 14px;"><strong>⚠️ Error común:</strong> [ERROR QUE COMETIÓ EL ALUMNO]</p>
-            </div>
-            
-            <div style="background: #f0fff4; padding: 12px; border-radius: 8px; margin: 15px 0;">
-                <p style="margin: 0; font-size: 14px; color: #38a169;"><strong>🎯 Para recordar:</strong> [TRUCO MNEMOTÉCNICO]</p>
+            <div class="flashcard-back" style="position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07); padding: 25px 30px; transform: rotateY(180deg); overflow-y: auto; color: #4a5568; line-height: 1.7;">
+                <h4 style="color: #667eea; margin: 0 0 10px 0; font-size: 16px; border-bottom: 2px solid #eef2ff; padding-bottom: 8px; font-weight: 600;">
+                    Explicación Detallada
+                </h4>
+                <p style="font-size: 16px;">
+                    [EXPLICACIÓN CLARA, PRECISA Y BIEN REDACTADA. Usa 2-3 párrafos si es necesario. NO TE LIMITES. La calidad y profundidad importan más que la brevedad.]
+                </p>
+                
+                <div style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 10px; margin-top: 15px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5;">
+                    <code style="white-space: pre-wrap;">[EJEMPLO DE CÓDIGO (si aplica)]</code>
+                </div>
+                
+                <div style="background: #fff5f5; border-left: 4px solid #fc8181; padding: 12px 15px; margin-top: 15px; font-size: 14px; line-height: 1.6;">
+                    <strong>Punto clave (Error Común):</strong> [Relaciona esto con los errores del alumno o un error común, basado en: {incorrect_questions_text}]
+                </div>
             </div>
         </div>
     </div>
-</div>
-```
+CIERRE DEL HTML
+Cierra el grid y añade la etiqueta <style> para la animación.
+HTML
 
-DESPUÉS DE LAS 12 FLASHCARDS, AGREGA ESTE CSS:
-```html
-<style>
-.flashcard.flipped .flashcard-inner {{
-    transform: rotateY(180deg);
-}}
-</style>
-```
+</div> <style>
+    /* Animación de volteo */
+    .flashcard.flipped .flashcard-inner {{
+        transform: rotateY(180deg);
+    }}
+    /* Para mejorar el scroll en la cara trasera */
+    .flashcard-back {{
+        scrollbar-width: thin;
+        scrollbar-color: #a0aec0 #f7fafc;
+    }}
+    .flashcard-back::-webkit-scrollbar {{
+        width: 6px;
+    }}
+    .flashcard-back::-webkit-scrollbar-thumb {{
+        background-color: #a0aec0;
+        border-radius: 10px;
+    }}</style>
+REQUISITOS FINALES:
 
-REQUISITOS CRÍTICOS:
-1. HTML válido y sanitizable
-2. CSS inline con transform: rotateY()
-3. NO uses IDs, solo clases
-4. Referencia los errores del alumno
-5. Código Python comentado
-6. Tono amigable pero técnico
-7. Explicaciones concisas (máx 3 líneas)
-
-RETORNA:
-- SOLO HTML completo de las 12 flashcards + style
-- Sin markdown (sin ```html)
-- Sin explicaciones adicionales
-- Listo para insertar en un div"""
-
+Retorna un SOLO bloque de HTML.
+El HTML debe empezar con el <div class="weak-topics-header">...</div>.
+Seguido por <div class="flashcard-grid">... conteniendo EXACTAMENTE 15 flashcards.
+Termina con la etiqueta <style>.
+No incluyas markdown (```html) en la salida final.
+Valida la estructura 100%. No falles. El diseño debe ser perfecto.
+"""
 
 def get_decision_tree_prompt(text_title, text_topic, weak_topics, incorrect_questions_text, text_content_preview):
     """Prompt para Árbol de Decisión"""
