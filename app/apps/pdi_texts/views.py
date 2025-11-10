@@ -74,14 +74,15 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             ).count()
             
             # ✅ NUEVO: Si ya tomó el cuestionario inicial, no permitir más intentos
-            if previous_attempts >= 1:
+            # Se permite GET para que el visor de material pueda cargar los temas dominados
+            if previous_attempts >= 1 and request.method != 'GET':
                 return Response({
                     'error': 'Ya completaste el cuestionario inicial de este texto',
                     'message': 'Solo puedes tomar el cuestionario inicial una vez',
                     'previous_attempts': previous_attempts,
                     'already_taken': True
                 }, status=status.HTTP_403_FORBIDDEN)
-            
+
             serializer = InitialQuizSerializer(quiz)
             
             return Response({

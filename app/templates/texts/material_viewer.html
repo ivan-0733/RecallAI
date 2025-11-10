@@ -4,63 +4,248 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Material de Estudio - RecallAI</title>
+    <title>Cargando Material... - RecallAI</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    
     <style>
-        /* (Tus estilos... no los pego aquí para ahorrar espacio, pero son los mismos que ya tenías) */
-        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px 0; }
-        .material-container { max-width: 1200px; margin: 0 auto; }
-        .material-header { background: white; border-radius: 15px; padding: 25px; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .material-content { background: white; border-radius: 15px; padding: 30px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); min-height: 500px; }
-        .material-type-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; margin-right: 10px; }
-        .badge-flashcard { background: #e3f2fd; color: #1976d2; }
-        .badge-decision-tree { background: #f3e5f5; color: #7b1fa2; }
-        .badge-mind-map { background: #e8f5e9; color: #388e3c; }
-        .badge-summary { background: #fff3e0; color: #f57c00; }
-        .weak-topics { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
-        .weak-topic-tag { background: #fff5f5; border: 2px solid #fc8181; color: #c53030; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; }
-        .action-buttons { display: flex; gap: 10px; margin-top: 15px; }
-        .btn-custom { padding: 10px 20px; border-radius: 8px; font-weight: 600; transition: all 0.3s; }
-        .btn-custom:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        :root {
+            /* Se definen los colores base para cada tipo */
+            --color-flashcard-bg: #e3f2fd;
+            --color-flashcard-fg: #1976d2;
+            --color-decision_tree-bg: #f3e5f5;
+            --color-decision_tree-fg: #7b1fa2;
+            --color-mind_map-bg: #e8f5e9;
+            --color-mind_map-fg: #388e3c;
+            --color-summary-bg: #fff3e0;
+            --color-summary-fg: #f57c00;
+            --color-default-bg: #f0f0f0;
+            --color-default-fg: #555;
+        }
+
+        body { 
+            background: #f4f6f9; 
+            min-height: 100vh; 
+            padding: 20px 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .material-container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+        
+        .material-header { 
+            background: white; 
+            border-radius: 16px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+            overflow: hidden; 
+        }
+        
+        .header-title-area {
+            padding: 25px 30px;
+            display: flex;
+            /* justify-content: space-between; <-- Se cambia esto */
+            justify-content: center; /* CAMBIO: Se centra el contenido principal */
+            align-items: center;
+            gap: 20px;
+            background: var(--color-default-bg); 
+            color: var(--color-default-fg); 
+            transition: all 0.5s ease;
+            position: relative; /* CAMBIO: Se añade para anclar el botón */
+        }
+        
+        /* Se aplican los fondos de color dinámicamente */
+        .header-title-area.type-flashcard {
+            background: linear-gradient(135deg, var(--color-flashcard-bg) 0%, #ffffff 100%);
+            color: var(--color-flashcard-fg);
+            border-bottom: 3px solid var(--color-flashcard-fg);
+        }
+        .header-title-area.type-decision_tree {
+            background: linear-gradient(135deg, var(--color-decision_tree-bg) 0%, #ffffff 100%);
+            color: var(--color-decision_tree-fg);
+            border-bottom: 3px solid var(--color-decision_tree-fg);
+        }
+        .header-title-area.type-mind_map {
+            background: linear-gradient(135deg, var(--color-mind_map-bg) 0%, #ffffff 100%);
+            color: var(--color-mind_map-fg);
+            border-bottom: 3px solid var(--color-mind_map-fg);
+        }
+        .header-title-area.type-summary {
+            background: linear-gradient(135deg, var(--color-summary-bg) 0%, #ffffff 100%);
+            color: var(--color-summary-fg);
+            border-bottom: 3px solid var(--color-summary-fg);
+        }
+
+        .header-title { 
+            flex: 1; 
+            min-width: 0; 
+            text-align: center; /* CAMBIO: Se centra el texto dentro del contenedor del título */
+        }
+        .header-title h1 {
+            margin: 0;
+            font-size: 1.7rem; 
+            font-weight: 700;
+            line-height: 1.3;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .header-title p {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.8;
+        }
+
+        /* CAMBIO: Se posiciona el contenedor del botón de forma absoluta */
+        .header-title-area > div:last-child {
+            position: absolute;
+            right: 30px; /* Alineado a la derecha del padding */
+            top: 50%; /* Centrado verticalmente */
+            transform: translateY(-50%);
+        }
+
+        .btn-custom { 
+            padding: 10px 20px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            transition: all 0.3s;
+            flex-shrink: 0;
+            background: #fff;
+            color: #007bff;
+            border: 1px solid #007bff;
+        }
+        .btn-custom:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 5px 15px rgba(0, 123, 255, 0.2);
+            background: #007bff;
+            color: #fff;
+        }
+
+        /* --- INICIO DE ESTILOS PARA TÓPICOS --- */
+        .topics-section {
+            padding: 20px 30px;
+            background: #fff;
+        }
+        .topics-section.weak {
+            border-bottom: 1px solid #eee; /* Línea divisoria */
+        }
+        
+        .topics-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .topics-title.weak { color: #721c24; }
+        .topics-title.strong { color: #155724; } /* Título verde oscuro */
+
+        .topics-list { 
+            display: flex; 
+            flex-wrap: wrap;
+            gap: 10px; 
+        }
+        
+        /* Tags de Temas Débiles (ROJOS) */
+        .topic-tag-red { 
+            background: #fff5f5; 
+            border: 1px solid #f5c6cb; 
+            color: #721c24; 
+            padding: 6px 14px; 
+            border-radius: 20px; 
+            font-size: 13px; 
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+        }
+        .topic-tag-red .icon {
+            margin-right: 8px;
+            color: #c53030;
+            font-size: 12px;
+        }
+        
+        /* Tags de Temas Dominados (VERDES) */
+        .topic-tag-green { 
+            background: #f0fff4; /* Fondo verde muy claro */
+            border: 1px solid #c3e6cb; /* Borde verde claro */
+            color: #155724; /* Texto verde oscuro */
+            padding: 6px 14px; 
+            border-radius: 20px; 
+            font-size: 13px; 
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+        }
+        .topic-tag-green .icon {
+            margin-right: 8px;
+            color: #28a745; /* Icono verde */
+            font-size: 12px;
+        }
+        /* --- FIN DE ESTILOS PARA TÓPICOS --- */
+
+        .material-content { 
+            background: white; 
+            border-radius: 16px; 
+            padding: 30px; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08); 
+            min-height: 500px; 
+        }
+        
         #materialContent { animation: fadeIn 0.5s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .loading-spinner { display: flex; justify-content: center; align-items: center; min-height: 400px; flex-direction: column; }
-        .spinner-border-custom { width: 3rem; height: 3rem; border-width: 0.3em; }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        
+        .loading-spinner { 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 400px; 
+            flex-direction: column; 
+        }
+        .spinner-border-custom { 
+            width: 3rem; 
+            height: 3rem; 
+            border-width: 0.3em; 
+        }
     </style>
-</head>
+    </head>
 <body>
     <div class="material-container">
+        
         <div class="material-header">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <h1 class="mb-2">
-                        <i class="fas fa-book-open text-primary"></i>
-                        <span id="materialTitle">Cargando...</span>
-                    </h1>
-                    <div id="materialMeta">
-                        </div>
+            
+            <div class="header-title-area" id="headerTitleArea">
+                <div class="header-title">
+                    <p id="materialType">Cargando...</p>
+                    <h1 id="materialTitle">Material de Estudio</h1>
                 </div>
                 <div>
-                    <a href="/dashboard/" class="btn btn-outline-secondary btn-custom">
+                    <a href="/dashboard/" class="btn btn-custom">
                         <i class="fas fa-home"></i> Dashboard
                     </a>
                 </div>
             </div>
 
-            <div class="weak-topics" id="weakTopics">
-                </div>
-
-            <div class="action-buttons" id="actionButtons" style="display: none;"> <button class="btn btn-success btn-custom" onclick="printMaterial()">
-                    <i class="fas fa-print"></i> Imprimir
-                </button>
-                <button class="btn btn-info btn-custom" onclick="downloadMaterial()">
-                    <i class="fas fa-download"></i> Descargar HTML
-                </button>
+            <div class="topics-section weak" id="weakTopicsContainer" style="display: none;">
+                <h3 class="topics-title weak">Temas débiles</h3>
+                <div class="topics-list" id="weakTopicsList">
+                    </div>
             </div>
+            
+            <div class="topics-section strong" id="strongTopicsContainer" style="display: none;">
+                <h3 class="topics-title strong">Temas dominados</h3>
+                <div class="topics-list" id="strongTopicsList">
+                    </div>
+            </div>
+            
         </div>
-
         <div class="material-content">
             <div id="loadingSpinner" class="loading-spinner">
                 <div class="spinner-border text-primary spinner-border-custom" role="status">
@@ -80,11 +265,11 @@
 
     <script>
     let materialData = null;
-        // Este es el ID del UserDidacticMaterial (ej: 21)
+        // Se obtiene el ID del material desde la URL
         const materialId = window.location.pathname.split('/')[2]; 
 
         $(document).ready(function() {
-            // Iniciar la carga directa del material
+            // Se inicia la carga directa del material
             loadMaterial();
         });
 
@@ -96,7 +281,7 @@
                 return;
             }
 
-            // Llamamos al nuevo endpoint que creamos: /api/materials/{id}/
+            // Se llama al endpoint de la API para obtener el material
             const apiUrl = `/api/materials/${materialId}/`;
 
             $.ajax({
@@ -106,80 +291,76 @@
                     'Authorization': 'Bearer ' + token
                 },
                 success: function(material) {
-                    // ¡Material encontrado!
-                    // Detenemos el spinner y mostramos el contenido
+                    // Si la llamada es exitosa, se muestra el material
                     materialData = material;
                     displayMaterial(materialData);
+                    
+                    // --- INICIO DE NUEVA LÓGICA ---
+                    // Se llama a la función para cargar los temas dominados
+                    // Se pasa el ID del texto (material.text) y la lista de temas débiles
+                    loadAndDisplayStrongTopics(material.text, material.weak_topics);
+                    // --- FIN DE NUEVA LÓGICA ---
                 },
                 error: function(xhr) {
-                    // Manejar errores
+                    // Se manejan errores
                     if (xhr.status === 401) {
                         localStorage.clear();
                         window.location.href = '/login/';
                     } else if (xhr.status === 404) {
                         toastr.error('Material no encontrado.');
-                        $('#loadingSpinner').show(); // Asegurarse que el spinner esté visible
+                        $('#loadingSpinner').show(); 
                         $('#loadingText').text('Este material no existe o no te pertenece.');
+                        $('#materialType').text('Error');
+                        $('#materialTitle').text('Material no encontrado');
                     } else {
                         toastr.error('Error al cargar el material.');
                         $('#loadingSpinner').show();
                         $('#loadingText').text('Ocurrió un error inesperado al cargar el material.');
+                        $('#materialType').text('Error');
+                        $('#materialTitle').text('Error de carga');
                     }
                 }
             });
         }
         
-        // (El resto de las funciones: displayMaterial, trackMaterialView, printMaterial, downloadMaterial, y los estilos de impresión
-        // son idénticas a las que te pasé en la respuesta anterior. Las puedes copiar y pegar desde allí
-        // o usar las que ya tenías si las modificaste).
-
         function displayMaterial(material) {
             materialData = material;
 
-            // Meta información
-            const metaHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                    <div>
-                        <h2 style="margin: 0;">${material.material_type_display}</h2>
-                        <p style="margin: 5px 0 0 0; color: #666;">
-                            <strong>${material.text_title}</strong>
-                        </p>
-                    </div>
-                    ${material.generation_time_seconds ? `
-                        <small class="text-muted ml-2">
-                            <i class="fas fa-bolt"></i> 
-                            ${material.generation_time_seconds}s de generación
-                        </small>
-                    ` : ''}
-                </div>
-            `;
+            // Se añade la clase de tipo al contenedor de la cabecera para cambiar el color
+            $('#headerTitleArea').addClass('type-' + material.material_type);
 
-            $('#materialMeta').html(metaHTML);
+            // Se actualiza el tipo de material (ej: FLASHCARDS)
+            $('#materialType').text(material.material_type_display);
+            
+            // Se establece el título del texto en el H1 (ej: Procesamiento de Imágenes)
+            $('#materialTitle').text(material.text_title);
 
-            // Temas débiles
+            // Se actualiza el título de la pestaña del navegador
+            document.title = `${material.material_type_display}: ${material.text_title} - RecallAI`;
+            
+            // Se muestran los temas débiles (Rojos)
             if (material.weak_topics && material.weak_topics.length > 0) {
+                // Se crean los tags rojos con el ícono
                 const topicsHTML = material.weak_topics.map(topic => 
-                    `<span class="weak-topic-tag">⚠️ ${topic}</span>`
+                    `<span class="topic-tag-red"><i class="fas fa-exclamation-triangle icon"></i> ${topic}</span>`
                 ).join('');
-                $('#weakTopics').html(`
-                    <div style="width: 100%; margin-top: 10px;">
-                        <strong style="display: block; margin-bottom: 8px;">
-                            <i class="fas fa-exclamation-triangle text-warning"></i>
-                            Áreas de enfoque:
-                        </strong>
-                        ${topicsHTML}
-                    </div>
-                `);
+                
+                // Se insertan los tags en el div
+                $('#weakTopicsList').html(topicsHTML);
+                // Se muestra el contenedor de temas débiles
+                $('#weakTopicsContainer').show();
             }
 
-            // ✅ CRÍTICO: NO SANITIZAR FLASHCARDS (permite scripts)
+            // NOTA: Los temas dominados se cargan en la función 'loadAndDisplayStrongTopics'
+
+            // CRÍTICO: NO se sanitizan las Flashcards (permite scripts)
             let cleanHTML;
             if (material.material_type === 'flashcard') {
-                // Para flashcards, insertar HTML directamente SIN sanitizar
+                // Para flashcards, se inserta el HTML directamente
                 cleanHTML = material.html_content;
                 console.log('⚠️ Flashcard: HTML insertado directamente (scripts permitidos)');
             } else {
-                // Para otros materiales, sanitizar
+                // Para otros materiales, se sanitiza
                 cleanHTML = DOMPurify.sanitize(material.html_content, {
                     ADD_TAGS: ['style', 'script'],
                     ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
@@ -187,23 +368,23 @@
                 console.log('✅ Material sanitizado con DOMPurify');
             }
 
+            // Se oculta el spinner de carga
             $('#loadingSpinner').hide();
             
-            // Insertar HTML
+            // Se inserta el HTML en el contenedor
             const contentDiv = $('#materialContent');
             contentDiv.html(cleanHTML).fadeIn();
             
-            // ✅ EJECUTAR SCRIPTS MANUALMENTE para flashcards
+            // Se ejecutan manualmente los scripts para las flashcards
             if (material.material_type === 'flashcard') {
-                // Extraer y ejecutar scripts del HTML insertado
                 const scripts = contentDiv.find('script');
                 scripts.each(function() {
                     const scriptContent = $(this).html();
                     if (scriptContent) {
                         try {
-                            // Ejecutar el script en el contexto global
-                            eval(scriptContent);
-                            console.log('✅ Script ejecutado correctamente');
+                            // Se usa window.eval para asegurar el scope global
+                            window.eval(scriptContent);
+                            console.log('✅ Script ejecutado en window scope');
                         } catch (e) {
                             console.error('❌ Error ejecutando script:', e);
                         }
@@ -211,79 +392,65 @@
                 });
             }
             
-            $('#actionButtons').fadeIn();
-
-            // Tracking de visualización
+            // Se registra la visualización
             trackMaterialView(material.id);
         }
+
+        // --- INICIO DE NUEVA FUNCIÓN ---
+        /**
+         * Se obtiene el quiz de un texto, se calculan los temas dominados (complemento)
+         * y se muestran en la sección verde.
+         */
+        function loadAndDisplayStrongTopics(textId, weakTopics) {
+            const token = localStorage.getItem('access_token');
+            // Se crea un Set de temas débiles para búsqueda rápida
+            const weakTopicsSet = new Set(weakTopics);
+            
+            // Se llama a la API para obtener el cuestionario original
+            // Se añade un timestamp para evitar caché si el quiz se ha tomado recientemente
+            $.ajax({
+                url: `/api/texts/${textId}/quiz/?_=${new Date().getTime()}`,
+                type: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                success: function(response) {
+                    let allTopics = [];
+                    if (response.quiz && response.quiz.questions_json) {
+                        // Se extraen todos los temas únicos del cuestionario
+                        const allTopicsSet = new Set(
+                            response.quiz.questions_json.map(q => q.topic).filter(Boolean)
+                        );
+                        
+                        // Se calcula el complemento (Temas Totales - Temas Débiles)
+                        allTopics = [...allTopicsSet].filter(topic => !weakTopicsSet.has(topic));
+                    }
+                    
+                    // Se muestran los temas dominados (Verdes)
+                    if (allTopics.length > 0) {
+                        const topicsHTML = allTopics.map(topic => 
+                            `<span class="topic-tag-green"><i class="fas fa-check-circle icon"></i> ${topic}</span>`
+                        ).join('');
+                        
+                        $('#strongTopicsList').html(topicsHTML);
+                        $('#strongTopicsContainer').show();
+                    }
+                },
+                error: function(xhr) {
+                    // Si falla (ej: 403 por ya haberlo tomado), no se muestra error,
+                    // solo no se muestra la sección de temas dominados.
+                    console.error('Error al cargar temas del quiz (puede ser normal si ya se tomó):', xhr.responseText);
+                }
+            });
+        }
+        // --- FIN DE NUEVA FUNCIÓN ---
 
         function trackMaterialView(materialId) {
             const token = localStorage.getItem('access_token');
             console.log('Material viewed:', materialId);
         }
 
-        function printMaterial() {
-            window.print();
-        }
-
-        function downloadMaterial() {
-            if (!materialData) {
-                toastr.error('No hay material para descargar');
-                return;
-            }
-
-            const htmlContent = `
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${materialData.text_title} - ${materialData.material_type_display}</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; }
-        .content { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>${materialData.text_title}</h1>
-        <p>${materialData.material_type_display} - RecallAI</p>
-        <p><small>Generado el ${new Date(materialData.generated_at).toLocaleDateString('es-MX')}</small></p>
-    </div>
-    <div class="content">
-        ${materialData.html_content}
-    </div>
-</body>
-</html>
-            `;
-
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${materialData.text_title.replace(/[^a-z0-9]/gi, '_')}_${materialData.material_type}.html`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-
-            toastr.success('¡Descarga iniciada!');
-        }
-
-        // CSS para impresión
-        const printStyles = `
-            @media print {
-                body { background: white !important; }
-                .material-header { break-inside: avoid; }
-                #actionButtons, .action-buttons { display: none !important; }
-                .material-content { box-shadow: none !important; }
-            }
-        `;
-
-        const styleSheet = document.createElement('style');
-        styleSheet.textContent = printStyles;
-        document.head.appendChild(styleSheet);
+        // Las funciones printMaterial() y downloadMaterial() han sido ELIMINADAS
     </script>
 </body>
 </html>
