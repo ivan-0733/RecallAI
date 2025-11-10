@@ -18,8 +18,9 @@ INSTRUCCIONES CRÍTICAS DE ENFOQUE (LÓGICA 75/25):
 2.  **ENFOQUE DE REPASO (25% del material, 5 tarjetas):** Deben ser un repaso de conceptos generales. Enfócate en: {review_topics_str}
 
 NUEVA INSTRUCCIÓN DE ETIQUETADO (MUY IMPORTANTE):
-- Para las 15 tarjetas de TEMAS DÉBILES, la etiqueta DEBE ser: "CONCEPTO (TEMA DÉBIL):", "PREGUNTA (TEMA DÉBIL):" o "COMPLETAR (TEMA DÉBIL):"
-- Para las 5 tarjetas de TEMAS GENERALES, la etiqueta DEBE ser: "CONCEPTO (TEMA GENERAL):", "PREGUNTA (TEMA GENERAL):" o "COMPLETAR (TEMA GENERAL):"
+- Para las 15 tarjetas de TEMAS DÉBILES, la etiqueta DEBE ser: "CONCEPTO (TEMA DÉBIL - [Nombre del tema específico]):", "PREGUNTA (TEMA DÉBIL - [Nombre del tema específico]):" o "COMPLETAR (TEMA DÉBIL - [Nombre del tema específico]):"
+- Para las 5 tarjetas de TEMAS GENERALES, la etiqueta DEBE ser: "CONCEPTO (TEMA GENERAL - [Nombre del tema específico]):", "PREGUNTA (TEMA GENERAL - [Nombre del tema específico]):" o "COMPLETAR (TEMA GENERAL - [Nombre del tema específico]):"
+- El [Nombre del tema específico] debe ser el subtema concreto que trata esa flashcard
 
 INSTRUCCIONES DE FORMATO:
 1. Responde SOLO con HTML completo (sin ```html, sin explicaciones)
@@ -45,17 +46,17 @@ FORMATO DE TARJETAS (MUY IMPORTANTE):
 (Se aplica a los divs .content-front y .content-back)
 
 Para CONCEPTO (TEMA DÉBIL):
-- Arriba pequeño centrado: "CONCEPTO (TEMA DÉBIL):" (tamaño 14px, opacidad 0.7)
+- Arriba pequeño centrado: "CONCEPTO (TEMA DÉBIL - [Nombre del tema específico]):" (tamaño 14px, opacidad 0.7)
 - Abajo grande centrado: El término (tamaño 28px)
 - Reverso: texto negro normal
 
 Para PREGUNTA (TEMA GENERAL):
-- Arriba pequeño centrado: "PREGUNTA (TEMA GENERAL):" (tamaño 14px, opacidad 0.7)
+- Arriba pequeño centrado: "PREGUNTA (TEMA GENERAL - [Nombre del tema específico]):" (tamaño 14px, opacidad 0.7)
 - Abajo grande centrado: La pregunta (tamaño 28px)
 - Reverso: texto negro normal
 
 Para COMPLETAR (TEMA DÉBIL):
-- Arriba pequeño centrado: "COMPLETAR (TEMA DÉBIL):" (tamaño 14px, opacidad 0.7)
+- Arriba pequeño centrado: "COMPLETAR (TEMA DÉBIL - [Nombre del tema específico]):" (tamaño 14px, opacidad 0.7)
 - Abajo grande centrado: La frase con _____ (tamaño 28px)
 - Reverso: La palabra faltante en COLOR AZUL (#1976d2) + explicación en negro
 
@@ -84,8 +85,8 @@ EJEMPLO DE ESTRUCTURA:
 <head>
 <style>
 body {{ margin: 0; padding: 20px; font-family: Arial; background: #f8f9fa; }}
-.container {{ width: 100%; max-width: 100%; margin: 0 auto; background: white; padding: 24px; border-radius: 16px; }}
-.flashcard {{ display: none; width: 100%; height: 400px; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; }}
+.container {{ width: 100%; max-width: 100%; margin: 0 auto; background: white; padding: 20px; border-radius: 0; }}
+.flashcard {{ display: none; width: 100%; min-height: 500px; max-height: 600px; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; box-sizing: border-box; }}
 /* No se usa 'display: flex' en .flashcard.active, se usa en los hijos */
 .flashcard.active {{ display: block; }} 
 .front {{ background: #3d3d3d; color: white; }}
@@ -112,8 +113,9 @@ body {{ margin: 0; padding: 20px; font-family: Arial; background: #f8f9fa; }}
 .flashcard {{ padding: 0; }} 
 /* --- FIN CORRECCIÓN CSS --- */
 
-.card-label {{ font-size: 14px; opacity: 0.7; margin-bottom: 20px; letter-spacing: 1px; font-weight: 500; }}
-.card-content {{ font-size: 28px; font-weight: 400; line-height: 1.4; }}
+.card-label {{ font-size: 30px; opacity: 0.7; margin-bottom: 20px; letter-spacing: 1px; font-weight: 500; }}
+.card-content {{ font-size: 42px; font-weight: 400; line-height: 1.4; }}
+.content-back .card-content {{ font-size: 32px; line-height: 1.6; }}
 .answer-word {{ color: #1976d2; font-weight: 600; font-size: 32px; }}
 .controls {{ display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }}
 button {{ padding: 0; cursor: pointer; border: 2px solid #ddd; background: white; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; display: flex; align-items: center; justify-content: center; }}
