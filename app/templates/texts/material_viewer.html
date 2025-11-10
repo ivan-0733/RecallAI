@@ -234,7 +234,7 @@
             </div>
         
             <div class="topics-section strong" id="strongTopicsContainer" style="display: none;">
-                <h3 class="topics-title strong">Temas generales (Temas dominados)</h3>
+                <h3 class="topics-title strong">Temas dominados (Temas generales)</h3>
                 <div class="topics-list" id="strongTopicsList">
                     </div>
             </div>
@@ -422,8 +422,8 @@
                     const allTopics = new Set();
                     
                     questions.forEach(question => {
-                        if (question.topic) {
-                            allTopics.add(question.topic);
+                        if (question.tema) {  // Ahora busca 'tema' en español
+                            allTopics.add(question.tema);
                         }
                     });
 
