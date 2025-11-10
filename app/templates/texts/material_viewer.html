@@ -134,45 +134,24 @@
         // o usar las que ya tenías si las modificaste).
 
         function displayMaterial(material) {
-            // Título
-            $('#materialTitle').text(material.text_title);
+            materialData = material;
 
             // Meta información
-            const materialTypeIcons = {
-                'flashcard': 'fa-layer-group',
-                'decision_tree': 'fa-sitemap',
-                'mind_map': 'fa-project-diagram',
-                'summary': 'fa-file-alt'
-            };
-
-            const materialTypeClasses = {
-                'flashcard': 'badge-flashcard',
-                'decision_tree': 'badge-decision-tree',
-                'mind_map': 'badge-mind-map',
-                'summary': 'badge-summary'
-            };
-
             const metaHTML = `
-                <span class="material-type-badge ${materialTypeClasses[material.material_type]}">
-                    <i class="fas ${materialTypeIcons[material.material_type]}"></i>
-                    ${material.material_type_display}
-                </span>
-                <small class="text-muted">
-                    <i class="far fa-clock"></i> 
-                    Generado el ${new Date(material.generated_at).toLocaleDateString('es-MX', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
-                </small>
-                ${material.generation_time_seconds ? `
-                    <small class="text-muted ml-2">
-                        <i class="fas fa-bolt"></i> 
-                        ${material.generation_time_seconds}s de generación
-                    </small>
-                ` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <h2 style="margin: 0;">${material.material_type_display}</h2>
+                        <p style="margin: 5px 0 0 0; color: #666;">
+                            <strong>${material.text_title}</strong>
+                        </p>
+                    </div>
+                    ${material.generation_time_seconds ? `
+                        <small class="text-muted ml-2">
+                            <i class="fas fa-bolt"></i> 
+                            ${material.generation_time_seconds}s de generación
+                        </small>
+                    ` : ''}
+                </div>
             `;
 
             $('#materialMeta').html(metaHTML);
@@ -193,18 +172,49 @@
                 `);
             }
 
-            // Sanitizar y mostrar contenido HTML
-            const cleanHTML = DOMPurify.sanitize(material.html_content, {
-                ADD_TAGS: ['style', 'script'],
-                ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style']
-            });
+            // ✅ CRÍTICO: NO SANITIZAR FLASHCARDS (permite scripts)
+            let cleanHTML;
+            if (material.material_type === 'flashcard') {
+                // Para flashcards, insertar HTML directamente SIN sanitizar
+                cleanHTML = material.html_content;
+                console.log('⚠️ Flashcard: HTML insertado directamente (scripts permitidos)');
+            } else {
+                // Para otros materiales, sanitizar
+                cleanHTML = DOMPurify.sanitize(material.html_content, {
+                    ADD_TAGS: ['style', 'script'],
+                    ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
+                });
+                console.log('✅ Material sanitizado con DOMPurify');
+            }
 
             $('#loadingSpinner').hide();
-            $('#materialContent').html(cleanHTML).fadeIn();
-            $('#actionButtons').fadeIn(); // Mostrar botones de acción
+            
+            // Insertar HTML
+            const contentDiv = $('#materialContent');
+            contentDiv.html(cleanHTML).fadeIn();
+            
+            // ✅ EJECUTAR SCRIPTS MANUALMENTE para flashcards
+            if (material.material_type === 'flashcard') {
+                // Extraer y ejecutar scripts del HTML insertado
+                const scripts = contentDiv.find('script');
+                scripts.each(function() {
+                    const scriptContent = $(this).html();
+                    if (scriptContent) {
+                        try {
+                            // Ejecutar el script en el contexto global
+                            eval(scriptContent);
+                            console.log('✅ Script ejecutado correctamente');
+                        } catch (e) {
+                            console.error('❌ Error ejecutando script:', e);
+                        }
+                    }
+                });
+            }
+            
+            $('#actionButtons').fadeIn();
 
-            // Tracking de visualización (opcional)
-            trackMaterialView(material.id); // Usamos el ID del material final
+            // Tracking de visualización
+            trackMaterialView(material.id);
         }
 
         function trackMaterialView(materialId) {

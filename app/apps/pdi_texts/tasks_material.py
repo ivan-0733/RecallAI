@@ -28,19 +28,27 @@ logger = logging.getLogger(__name__)
 # Configurar Gemini
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
-# Tags HTML permitidos para sanitización
+# Tags HTML permitidos para sanitización - VERSIÓN AMPLIADA
 ALLOWED_TAGS = [
     'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'strong', 'em', 'u', 'br', 'ul', 'ol', 'li',
     'table', 'thead', 'tbody', 'tr', 'td', 'th',
     'code', 'pre', 'button', 'a',
-    'header', 'footer', 'section', 'article', 'style', 'script'
+    'header', 'footer', 'section', 'article', 
+    'style', 'script',  # PERMITIR style y script
+    'html', 'head', 'body', 'meta', 'title', 'link',  # Tags de documento
+    'svg', 'path'  # Para iconos
 ]
 
 ALLOWED_ATTRIBUTES = {
-    '*': ['class', 'style', 'id', 'onclick', 'onmouseover', 'onmouseout'],
+    '*': ['class', 'style', 'id', 'onclick', 'onmouseover', 'onmouseout', 'onload'],
     'a': ['href', 'title', 'target'],
     'button': ['onclick', 'type'],
+    'meta': ['charset', 'name', 'content'],
+    'link': ['rel', 'href'],
+    'svg': ['viewBox', 'width', 'height', 'fill'],
+    'path': ['d', 'fill'],
+    'script': ['type'],  # Permitir scripts
 }
 
 
@@ -86,11 +94,8 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         
         if material_type == 'flashcard':
             prompt = get_flashcard_prompt(
-                text_title=text.title,
-                text_topic=text.topic,
                 weak_topics=weak_topics,
-                incorrect_questions_text=incorrect_questions_text,
-                text_content_preview=text_content_preview
+                subject=text.topic
             )
         elif material_type == 'decision_tree':
             prompt = get_decision_tree_prompt(
@@ -105,7 +110,6 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
                 text_title=text.title,
                 text_topic=text.topic,
                 weak_topics=weak_topics,
-                incorrect_questions_text=incorrect_questions_text,
                 text_content_preview=text_content_preview
             )
         elif material_type == 'summary':
@@ -127,7 +131,7 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=16000,  # Máximo permitido
+                max_output_tokens=16000,
                 top_p=0.95,
                 top_k=40,
             )
@@ -142,13 +146,20 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         elif html_content.startswith('```'):
             html_content = html_content.replace('```', '').strip()
         
-        # Sanitizar HTML
-        clean_html = bleach.clean(
-            html_content,
-            tags=ALLOWED_TAGS,
-            attributes=ALLOWED_ATTRIBUTES,
-            strip=False
-        )
+        # ✅ CRÍTICO: NO SANITIZAR PARA FLASHCARDS
+        # Las flashcards generadas por IA son seguras y necesitan scripts
+        if material_type == 'flashcard':
+            clean_html = html_content  # NO sanitizar flashcards
+            logger.info("⚠️ Flashcard HTML NO sanitizado (scripts permitidos)")
+        else:
+            # Sanitizar otros tipos de material
+            clean_html = bleach.clean(
+                html_content,
+                tags=ALLOWED_TAGS,
+                attributes=ALLOWED_ATTRIBUTES,
+                strip=False
+            )
+            logger.info(f"✅ {material_type} HTML sanitizado")
         
         # Calcular tiempo de generación
         generation_time = int(time.time() - start_time)
