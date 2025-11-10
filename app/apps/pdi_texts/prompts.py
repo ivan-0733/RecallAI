@@ -1,140 +1,535 @@
-def get_flashcard_prompt(text_title, text_topic, weak_topics, incorrect_questions_text, text_content_preview):
+import logging
+
+logger = logging.getLogger(__name__)
+
+# --- INICIA LA FUNCIÓN MODIFICADA ---
+
+# (El resto de prompts.py... logging, get_decision_tree_prompt, etc.)
+
+# --- INICIA LA FUNCIÓN MODIFICADA Y CORREGIDA ---
+
+def get_flashcard_prompt(weak_topics, subject="General", **kwargs):
     """
-    Prompt para Flashcards interactivas con estilo minimalista de élite y cabecera de temas.
+    Genera un prompt para crear un carrusel de 20 flashcards interactivas.
+    El prompt le pide a la IA que genere un bloque HTML/CSS/JS auto-contenido
+    que muestra una tarjeta a la vez, con navegación y animación de volteo al hacer clic.
+    
+    El **kwargs se añade para aceptar y descartar argumentos adicionales 
+    (como text_title, text_topic, etc.) que la tarea de Celery envía.
     """
     
-    # Preparamos los temas débiles para el prompt.
-    # Usamos los 3 principales, o el tema general si no hay.
-    topic_1 = weak_topics[0] if weak_topics else text_topic
-    topic_2 = weak_topics[1] if len(weak_topics) > 1 else topic_1
-    topic_3 = weak_topics[2] if len(weak_topics) > 2 else topic_2
-    
-    # Creamos un string con los temas débiles para el cabecero
-    weak_topics_str_list = ', '.join([f"'{t}'" for t in weak_topics[:3]])
+    # Convierte la lista de temas en un string legible
+    topics_str = ", ".join(weak_topics)
 
-    # NOTA: El bloque <style> al final de este f-string tiene llaves dobles {{ }} para escapar el CSS.
-    return f"""Eres un experto diseñador UI/UX y un pedagogo de élite especializado en Procesamiento Digital de Imágenes. Tu estándar de calidad es el más alto.
+    # El prompt ahora es extremadamente específico y provee todo el "boilerplate".
+    # La IA solo debe rellenar el contenido de [CONCEPTO] y [DEFINICIÓN].
+    prompt = f"""
+    Actúa como un desarrollador frontend senior y diseñador instruccional experto.
+    Tu tarea es generar un (1) bloque de código HTML auto-contenido para un
+    CARROUSEL de 20 FLASHCARDS interactivas.
 
-TAREA PRINCIPAL:
-Tu tarea es generar un HTML completo para una sesión de estudio interactiva. Este HTML debe ser EXTREMADAMENTE bonito, elegante, limpio y minimalista, aunque requiera mucho HTML y CSS inline.
+    El objetivo es reforzar los siguientes temas débiles: **{topics_str}**
+    de la materia de **{subject}**.
 
-El HTML debe tener DOS (2) partes:
-1. Un cabecero de 'Temas de Enfoque' (Weak Topics) con un diseño premium.
-2. Un 'grid' de 15 flashcards minimalistas que se voltean suavemente.
+    **REQUERIMIENTOS ESTRICTOS DE DISEÑO Y FUNCIONALIDAD:**
 
-CONTEXTO DEL ALUMNO:
-- Texto Estudiado: "{text_title}"
-- Tema Principal: {text_topic}
-- Temas donde MÁS falló (Weak Topics): {weak_topics_str_list}
-- Errores específicos: {incorrect_questions_text[:800]}
+    1.  **Total de Tarjetas:** Genera **exactamente 20 tarjetas**. Si los temas débiles son pocos (ej. 4), debes crear 5 tarjetas para cada tema. Si son muchos (ej. 20), crea 1 tarjeta por tema. El total debe ser 20.
+    2.  **Formato de Contenido:** El formato NO debe ser pregunta-respuesta. Debe ser **"Concepto"** en el frente y **"Definición"** en el reverso.
+    3.  **Funcionalidad del Carrusel:**
+        * Solo se debe ver **una (1) tarjeta a la vez**.
+        * Debe haber un **contador** en la esquina inferior izquierda (ej: "1 / 20").
+        * Debe haber **flechas de navegación** (Siguiente/Anterior) en la esquina inferior derecha.
+    4.  **Funcionalidad de Volteo:**
+        * La tarjeta se voltea al **hacer clic sobre ella** (sobre la tarjeta, no un botón).
+        * La tarjeta debe volver a su estado original (sin voltear) cuando se navega a la siguiente o anterior.
+    5.  **Código Auto-contenido:** El bloque HTML final debe incluir:
+        * Una (1) etiqueta `<style>` con TODO el CSS.
+        * Una (1) etiqueta `<script>` con TODO el JavaScript.
+        * El HTML para el mazo, las 20 tarjetas, el contador y la navegación.
+    6.  **Estilo:** Profesional, centrado, modo oscuro (dark-mode), legible y pulido.
 
-INSTRUCCIONES DE CALIDAD (CRÍTICO Y OBLIGATORIO):
-- ¡NO TE LIMITES POR LA CANTIDAD DE TOKENS! La calidad del diseño, la precisión de la información y la estructura impecable son tu única prioridad. Puedes usar todos los tokens que necesites. No resumas si la explicación requiere detalle.
-- ¡VALIDACIÓN MÚLTIPLE! Valida tu salida múltiples veces. El HTML y CSS no deben romperse, ni superponerse, ni salirse de los márgenes. El diseño debe ser perfecto y estable. La alineación y el espaciado deben ser impecables.
-- REDACCIÓN: La redacción debe ser profesional, clara y experta.
-- CSS: Usa CSS 100% inline, excepto la animación `.flipped` que irá en una etiqueta `<style>`.
+    **UTILIZA ESTE CÓDIGO HTML, CSS Y JS EXACTO COMO PLANTILLA:**
+    Asegúrate de que la IA llene los 20 bloques `flashcard-container`.
 
----
-PARTE 1: CABECERO DE TEMAS DE ENFOQUE (Weak Topics)
----
-Primero, genera este cabecero. Debe ser elegante y destacar los temas a reforzar.
+    ```html
+    <style>
+    /* Contenedor principal del mazo de tarjetas */
+    .flashcard-deck {{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        position: relative;
+        width: 100%;
+        max-width: 500px; /* Ancho máximo del carrusel */
+        height: 350px;     /* Alto fijo para el carrusel */
+        margin: 20px auto; /* Centrado en la página */
+    }}
 
-ESTRUCTURA DEL CABECERO (HTML):
-```html
-<div class="weak-topics-header" style="background: linear-gradient(135deg, #f5f7fa 0%, #eef2ff 100%); border: 1px solid #dcdfe6; padding: 25px 30px; border-radius: 18px; margin-bottom: 40px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); font-family: 'Segoe UI', sans-serif;">
-    <h3 style="margin: 0 0 18px 0; font-size: 20px; font-weight: 600; color: #333d4b;">Tus Áreas de Enfoque Personalizadas</h3>
-    <div class="topics-container" style="display: flex; flex-wrap: wrap; gap: 12px;">
-        <span style="background: #ffffff; border: 1px solid #dcdfe6; color: #c53030; font-weight: 500; padding: 8px 16px; border-radius: 20px; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 1.2em;">⚠️</span> {topic_1}
-        </span>
-        <span style="background: #ffffff; border: 1px solid #dcdfe6; color: #dd6b20; font-weight: 500; padding: 8px 16px; border-radius: 20px; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 1.2em;">⚠️</span> {topic_2}
-        </span>
-        <span style="background: #ffffff; border: 1px solid #dcdfe6; color: #5a67d8; font-weight: 500; padding: 8px 16px; border-radius: 20px; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 1.2em;">⚠️</span> {topic_3}
-        </span>
-        </div>
-</div>
-PARTE 2: GRID DE FLASHCARDS MINIMALISTAS (15 tarjetas)
-Segundo, después del cabecero, genera un grid con 15 flashcards.
-DISTRIBUCIÓN DE TEMAS (OBLIGATORIA):
+    /* Contenedor de una sola tarjeta (para posicionamiento y perspectiva) */
+    .flashcard-container {{
+        width: 100%;
+        height: 100%;
+        perspective: 1200px;
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.4s ease-in-out;
+        display: flex; /* Para centrar la tarjeta interna */
+        justify-content: center;
+        align-items: center;
+    }}
 
-9 flashcards sobre: "{topic_1}" (El tema MÁS débil)
-4 flashcards sobre: "{topic_2}"
-2 flashcards sobre: "{topic_3}"
-ESTRUCTURA DEL GRID (HTML):
-HTML
+    /* Tarjeta activa (visible) */
+    .flashcard-container.is-active {{
+        opacity: 1;
+        pointer-events: all;
+    }}
 
-<div class="flashcard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; perspective: 1800px;">
-ESTRUCTURA DE CADA FLASHCARD (HTML):
-Usa esta plantilla exacta para CADA una de las 15 flashcards. ¡El diseño es crucial!
-HTML
+    /* La tarjeta interna que gira */
+    .flashcard {{
+        width: 90%; /* Un poco más pequeña que el contenedor */
+        height: 90%;
+        position: relative;
+        transform-style: preserve-3d;
+        transition: transform 0.7s cubic-bezier(0.4, 0.0, 0.2, 1);
+        cursor: pointer;
+    }}
 
-    <div class="flashcard" onclick="this.classList.toggle('flipped')" style="width: 100%; height: 380px; cursor: pointer; font-family: 'Segoe UI', sans-serif;">
-        <div class="flashcard-inner" style="position: relative; width: 100%; height: 100%; transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); transform-style: preserve-3d;">
-            
-            <div class="flashcard-front" style="position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; padding: 25px 30px;">
-                <div>
-                    <span style="font-size: 13px; font-weight: 600; color: #667eea; background: #eef2ff; padding: 6px 12px; border-radius: 15px; display: inline-block;">
-                        [TEMA DE LA TARJETA (Ej: {topic_1})]
-                    </span>
-                </div>
-                <h3 style="font-size: 22px; font-weight: 600; color: #2d3748; text-align: left; margin: 20px 0; line-height: 1.4;">
-                    [CONCEPTO, TÉRMINO o PREGUNTA CLAVE. Debe ser conciso pero claro.]
-                </h3>
-                <p style="font-size: 13px; color: #a0aec0; text-align: left; margin-top: auto; font-weight: 500;">
-                    Haz clic para ver la explicación
-                </p>
-            </div>
-            
-            <div class="flashcard-back" style="position: absolute; width: 100%; height: 100%; backface-visibility: hidden; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07); padding: 25px 30px; transform: rotateY(180deg); overflow-y: auto; color: #4a5568; line-height: 1.7;">
-                <h4 style="color: #667eea; margin: 0 0 10px 0; font-size: 16px; border-bottom: 2px solid #eef2ff; padding-bottom: 8px; font-weight: 600;">
-                    Explicación Detallada
-                </h4>
-                <p style="font-size: 16px;">
-                    [EXPLICACIÓN CLARA, PRECISA Y BIEN REDACTADA. Usa 2-3 párrafos si es necesario. NO TE LIMITES. La calidad y profundidad importan más que la brevedad.]
-                </p>
-                
-                <div style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 10px; margin-top: 15px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5;">
-                    <code style="white-space: pre-wrap;">[EJEMPLO DE CÓDIGO (si aplica)]</code>
-                </div>
-                
-                <div style="background: #fff5f5; border-left: 4px solid #fc8181; padding: 12px 15px; margin-top: 15px; font-size: 14px; line-height: 1.6;">
-                    <strong>Punto clave (Error Común):</strong> [Relaciona esto con los errores del alumno o un error común, basado en: {incorrect_questions_text}]
-                </div>
-            </div>
-        </div>
-    </div>
-CIERRE DEL HTML
-Cierra el grid y añade la etiqueta <style> para la animación.
-HTML
-
-</div> <style>
-    /* Animación de volteo */
-    .flashcard.flipped .flashcard-inner {{
+    /* Clase que se añade con JS para activar el giro */
+    .flashcard.is-flipped {{
         transform: rotateY(180deg);
     }}
-    /* Para mejorar el scroll en la cara trasera */
-    .flashcard-back {{
-        scrollbar-width: thin;
-        scrollbar-color: #a0aec0 #f7fafc;
-    }}
-    .flashcard-back::-webkit-scrollbar {{
-        width: 6px;
-    }}
-    .flashcard-back::-webkit-scrollbar-thumb {{
-        background-color: #a0aec0;
-        border-radius: 10px;
-    }}</style>
-REQUISITOS FINALES:
 
-Retorna un SOLO bloque de HTML.
-El HTML debe empezar con el <div class="weak-topics-header">...</div>.
-Seguido por <div class="flashcard-grid">... conteniendo EXACTAMENTE 15 flashcards.
-Termina con la etiqueta <style>.
-No incluyas markdown (```html) en la salida final.
-Valida la estructura 100%. No falles. El diseño debe ser perfecto.
-"""
+    /* Estilo común para ambas caras */
+    .card-face {{
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+        
+        border-radius: 16px;
+        background-color: #2d2d2d; /* Fondo oscuro */
+        color: #e0e0e0; /* Texto claro */
+        border: 1px solid #444;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    }}
+
+    /* Cara frontal: CONCEPTO */
+    .card-face.card-front {{
+        justify-content: center;
+        align-items: center;
+        padding: 25px;
+        font-size: 1.8em;
+        font-weight: 600;
+        text-align: center;
+    }}
+
+    /* Cara trasera: DEFINICIÓN */
+    .card-face.card-back {{
+        transform: rotateY(180deg);
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding: 30px;
+    }}
+
+    .card-back h4 {{
+        margin: 0 0 15px 0;
+        color: #58a6ff; /* Acento azul */
+        font-size: 1.2em;
+        font-weight: 600;
+        border-bottom: 1px solid #444;
+        padding-bottom: 8px;
+        width: 100%;
+    }}
+
+    .card-back p {{
+        margin: 0;
+        font-size: 1em;
+        line-height: 1.6;
+        overflow-y: auto;
+        max-height: calc(100% - 60px); /* Límite de altura */
+    }}
+    
+    /* Contenedor de Navegación */
+    .card-navigation {{
+        position: absolute;
+        bottom: 25px;
+        right: 25px;
+        display: flex;
+        gap: 10px;
+    }}
+
+    .nav-btn {{
+        background-color: #3f3f3f;
+        color: #e0e0e0;
+        border: 1px solid #555;
+        border-radius: 50%; /* Botones redondos */
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: background-color 0.3s, color 0.3s;
+    }}
+
+    .nav-btn:hover {{
+        background-color: #58a6ff;
+        color: #111;
+    }}
+    
+    /* Contador de tarjetas */
+    .card-counter {{
+        position: absolute;
+        bottom: 35px;
+        left: 35px;
+        font-size: 1em;
+        color: #888;
+        font-weight: 500;
+    }}
+    </style>
+
+    <div class="flashcard-deck">
+    
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 1]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 1]</h4>
+            <p>[Definición concisa y clara del concepto 1]</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 2]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 2]</h4>
+            <p>[Definición concisa y clara del concepto 2]</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 3]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 3]</h4>
+            <p>[Definición concisa y clara del concepto 3]</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 4]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 4]</h4>
+            <p>[Definición concisa y clara del concepto 4]</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 5]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 5]</h4>
+            <p>[Definición concisa y clara del concepto 5]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 6]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 6]</h4>
+            <p>[Definición concisa y clara del concepto 6]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 7]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 7]</h4>
+            <p>[Definición concisa y clara del concepto 7]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 8]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 8]</h4>
+            <p>[Definición concisa y clara del concepto 8]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 9]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 9]</h4>
+            <p>[Definición concisa y clara del concepto 9]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 10]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 10]</h4>
+            <p>[Definición concisa y clara del concepto 10]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 11]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 11]</h4>
+            <p>[Definición concisa y clara del concepto 11]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 12]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 12]</h4>
+            <p>[Definición concisa y clara del concepto 12]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 13]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 13]</h4>
+            <p>[Definición concisa y clara del concepto 13]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 14]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 14]</h4>
+            <p>[Definición concisa y clara del concepto 14]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 15]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 15]</h4>
+            <p>[Definición concisa y clara del concepto 15]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 16]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 16]</h4>
+            <p>[Definición concisa y clara del concepto 16]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 17]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 17]</h4>
+            <p>[Definición concisa y clara del concepto 17]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 18]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 18]</h4>
+            <p>[Definición concisa y clara del concepto 18]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 19]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 19]</h4>
+            <p>[Definición concisa y clara del concepto 19]</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flashcard-container">
+        <div class="flashcard" onclick="flipCard(this)">
+          <div class="card-face card-front">
+            <h3>[CONCEPTO 20]</h3>
+          </div>
+          <div class="card-face card-back">
+            <h4>[CONCEPTO 20]</h4>
+            <p>[Definición concisa y clara del concepto 20]</p>
+          </div>
+        </div>
+      </div>
+      <div class="card-counter" id="deck-counter">1 / 20</div>
+      
+      <div class="card-navigation">
+        <button class="nav-btn" id="prev-card" onclick="prevCard()">&#x2190;</button>
+        <button class="nav-btn" id="next-card" onclick="nextCard()">&#x2192;</button>
+      </div>
+
+    </div>
+
+    <script>
+    // Se encapsula el script para evitar colisiones de variables
+    (function() {{
+        let currentCardIndex = 0;
+        let cards = [];
+        let counterElement = null;
+
+        // Función para mostrar una tarjeta específica
+        function showCard(index) {{
+            if (!cards || cards.length === 0) return;
+
+            // Ocultar todas las tarjetas y quitar 'is-flipped'
+            cards.forEach((cardContainer, i) => {{
+                cardContainer.classList.remove('is-active');
+                const flashcard = cardContainer.querySelector('.flashcard');
+                if (flashcard) {{
+                    flashcard.classList.remove('is-flipped');
+                }}
+            }});
+
+            // Mostrar la tarjeta en el índice dado
+            if (cards[index]) {{
+                cards[index].classList.add('is-active');
+            }}
+
+            // Actualizar contador
+            if (counterElement) {{
+                // --- LÍNEA CORREGIDA ---
+                // Se cambió de JS template literal (`${...}`) a concatenación
+                // simple para evitar conflictos con el f-string de Python.
+                counterElement.textContent = (index + 1) + " / " + cards.length;
+                // --- FIN DE LA CORRECCIÓN ---
+            }}
+        }}
+
+        // Función para la tarjeta siguiente
+        window.nextCard = function() {{
+            currentCardIndex = (currentCardIndex + 1) % cards.length;
+            showCard(currentCardIndex);
+        }}
+
+        // Función para la tarjeta anterior
+        window.prevCard = function() {{
+            currentCardIndex = (currentCardIndex - 1 + cards.length) % cards.length;
+            showCard(currentCardIndex);
+        }}
+
+        // Función para voltear la tarjeta actual
+        window.flipCard = function(cardElement) {{
+            // 'cardElement' es el div .flashcard que se clickeó
+            cardElement.classList.toggle('is-flipped');
+        }}
+
+        // Inicializar el carrusel cuando el DOM esté listo
+        // Se usa un pequeño timeout para asegurar que el HTML se haya renderizado
+        setTimeout(function() {{
+            // Buscar elementos dentro del scope del .flashcard-deck
+            const deck = document.querySelector('.flashcard-deck');
+            if (deck) {{
+                cards = deck.querySelectorAll('.flashcard-container');
+                counterElement = deck.querySelector('#deck-counter');
+                
+                if(cards.length > 0) {{
+                    showCard(currentCardIndex);
+                }} else {{
+                    console.error("No se encontraron tarjetas ('.flashcard-container')");
+                }}
+            }} else {{
+                console.error("No se encontró el contenedor ('.flashcard-deck')");
+            }}
+        }}, 100); // 100ms de espera
+    }})();
+    </script>
+    ```
+
+    Por favor, genera el bloque HTML completo **llenando los 20 contenedores de tarjetas** (`.flashcard-container`) con un **Concepto** y una **Definición** para cada uno, basándote en los temas débiles **{topics_str}**.
+    Asegúrate de que el bloque de CÓDIGO HTML que generes sea único, completo (con style, script y divs) y siga la plantilla al pie de la letra.
+    **NO OMITAS NI UNA SOLA TARJETA. DEBEN SER 20.**
+    """
+    
+    logger.debug(f"Generando prompt de carrusel de 20 flashcards para los temas: {topics_str}")
+    return prompt
+
+# --- FIN DE LA FUNCIÓN ---
 
 def get_decision_tree_prompt(text_title, text_topic, weak_topics, incorrect_questions_text, text_content_preview):
     """Prompt para Árbol de Decisión"""
