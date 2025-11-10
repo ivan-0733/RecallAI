@@ -220,7 +220,7 @@
     <div class="material-container">
         
         <div class="material-header">
-            
+    
             <div class="header-title-area" id="headerTitleArea">
                 <div class="header-title">
                     <p id="materialType">Cargando...</p>
@@ -232,16 +232,16 @@
                     </a>
                 </div>
             </div>
-
-            <div class="topics-section weak" id="weakTopicsContainer" style="display: none;">
-                <h3 class="topics-title weak">Temas débiles</h3>
-                <div class="topics-list" id="weakTopicsList">
+        
+            <div class="topics-section strong" id="strongTopicsContainer" style="display: none;">
+                <h3 class="topics-title strong">Temas generales (Temas dominados)</h3>
+                <div class="topics-list" id="strongTopicsList">
                     </div>
             </div>
             
-            <div class="topics-section strong" id="strongTopicsContainer" style="display: none;">
-                <h3 class="topics-title strong">Temas dominados</h3>
-                <div class="topics-list" id="strongTopicsList">
+            <div class="topics-section weak" id="weakTopicsContainer" style="display: none;">
+                <h3 class="topics-title weak">Temas débiles</h3>
+                <div class="topics-list" id="weakTopicsList">
                     </div>
             </div>
             
@@ -396,52 +396,65 @@
             trackMaterialView(material.id);
         }
 
-        // --- INICIO DE NUEVA FUNCIÓN ---
-        /**
+/**
          * Se obtiene el quiz de un texto, se calculan los temas dominados (complemento)
          * y se muestran en la sección verde.
          */
-        function loadAndDisplayStrongTopics(textId, weakTopics) {
-            const token = localStorage.getItem('access_token');
-            // Se crea un Set de temas débiles para búsqueda rápida
-            const weakTopicsSet = new Set(weakTopics);
+         function loadAndDisplayStrongTopics(textId, weakTopics) {
+            // Usamos el ID del contenedor de la sección (el <div> principal de temas dominados)
+            const strongTopicsSection = $('#strongTopicsContainer');
             
-            // Se llama a la API para obtener el cuestionario original
-            // Se añade un timestamp para evitar caché si el quiz se ha tomado recientemente
-            $.ajax({
-                url: `/api/texts/${textId}/quiz/?_=${new Date().getTime()}`,
-                type: 'GET',
-                headers: {
-                    'Authorization': 'Bearer ' + token
-                },
-                success: function(response) {
-                    let allTopics = [];
-                    if (response.quiz && response.quiz.questions_json) {
-                        // Se extraen todos los temas únicos del cuestionario
-                        const allTopicsSet = new Set(
-                            response.quiz.questions_json.map(q => q.topic).filter(Boolean)
-                        );
-                        
-                        // Se calcula el complemento (Temas Totales - Temas Débiles)
-                        allTopics = [...allTopicsSet].filter(topic => !weakTopicsSet.has(topic));
+            fetch(`/api/texts/${textId}/quiz/`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data.quiz || !data.quiz.questions_json) {
+                        console.warn('No quiz data found for this text, hiding strong topics section.');
+                        strongTopicsSection.hide(); // Oculta con jQuery
+                        return; 
                     }
                     
-                    // Se muestran los temas dominados (Verdes)
-                    if (allTopics.length > 0) {
-                        const topicsHTML = allTopics.map(topic => 
+                    const questions = data.quiz.questions_json;
+                    const allTopics = new Set();
+                    
+                    questions.forEach(question => {
+                        if (question.topic) {
+                            allTopics.add(question.topic);
+                        }
+                    });
+
+                    const weakTopicsSet = new Set(weakTopics);
+                    const strongTopics = [...allTopics].filter(topic => !weakTopicsSet.has(topic));
+
+                    // --- INICIO DE LA CORRECCIÓN ---
+                    // Se comprueba si hay temas dominados
+                    if (strongTopics.length > 0) {
+                        
+                        // 1. Se crea el HTML de los tags verdes
+                        const topicsHTML = strongTopics.map(topic => 
                             `<span class="topic-tag-green"><i class="fas fa-check-circle icon"></i> ${topic}</span>`
                         ).join('');
                         
+                        // 2. Se inserta el HTML en el contenedor de la *lista* (#strongTopicsList)
                         $('#strongTopicsList').html(topicsHTML);
-                        $('#strongTopicsContainer').show();
+                        
+                        // 3. Se muestra la *sección* completa
+                        strongTopicsSection.show(); // Muestra con jQuery
+
+                    } else {
+                        // Si no hay temas dominados, se oculta la sección
+                        strongTopicsSection.hide();
                     }
-                },
-                error: function(xhr) {
-                    // Si falla (ej: 403 por ya haberlo tomado), no se muestra error,
-                    // solo no se muestra la sección de temas dominados.
-                    console.error('Error al cargar temas del quiz (puede ser normal si ya se tomó):', xhr.responseText);
-                }
-            });
+                    // --- FIN DE LA CORRECCIÓN ---
+                })
+                .catch(error => {
+                    console.error('Error fetching strong topics:', error);
+                    strongTopicsSection.hide(); // Oculta la sección en caso de error
+                });
         }
         // --- FIN DE NUEVA FUNCIÓN ---
 
