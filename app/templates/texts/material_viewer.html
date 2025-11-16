@@ -340,27 +340,104 @@
             
             // Se muestran los temas débiles (Rojos)
             if (material.weak_topics && material.weak_topics.length > 0) {
-                // Se crean los tags rojos con el ícono
                 const topicsHTML = material.weak_topics.map(topic => 
                     `<span class="topic-tag-red"><i class="fas fa-exclamation-triangle icon"></i> ${topic}</span>`
                 ).join('');
                 
-                // Se insertan los tags en el div
                 $('#weakTopicsList').html(topicsHTML);
-                // Se muestra el contenedor de temas débiles
                 $('#weakTopicsContainer').show();
             }
 
-            // NOTA: Los temas dominados se cargan en la función 'loadAndDisplayStrongTopics'
+            // ============================================
+            // DETECCIÓN MEJORADA DE ÁRBOL DE DECISIÓN
+            // ============================================
+            if (material.material_type === 'decision_tree') {
+                console.log('🌳 Tipo de material: decision_tree detectado');
+                console.log('📄 Contenido recibido (primeros 200 chars):', material.html_content.substring(0, 200));
+                
+                let arbolData = null;
+                
+                try {
+                    // INTENTO 1: Parsear directamente
+                    arbolData = JSON.parse(material.html_content);
+                    console.log('✅ JSON parseado exitosamente (método directo)');
+                } catch (e1) {
+                    console.warn('⚠️ Fallo parseo directo:', e1.message);
+                    
+                    try {
+                        // INTENTO 2: Limpiar markdown y extraer JSON
+                        let cleanContent = material.html_content.trim();
+                        
+                        // Remover bloques de código markdown
+                        if (cleanContent.startsWith('```')) {
+                            cleanContent = cleanContent.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+                        }
+                        
+                        // Buscar el primer { y el último }
+                        const jsonStart = cleanContent.indexOf('{');
+                        const jsonEnd = cleanContent.lastIndexOf('}');
+                        
+                        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+                            cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
+                        }
+                        
+                        arbolData = JSON.parse(cleanContent);
+                        console.log('✅ JSON parseado exitosamente (método limpieza)');
+                        
+                    } catch (e2) {
+                        console.error('❌ Error parseando árbol (ambos métodos):', e2);
+                        console.error('Contenido completo:', material.html_content);
+                        
+                        $('#loadingSpinner').hide();
+                        $('#materialContent').html(`
+                            <div class="alert alert-danger">
+                                <h4><i class="fas fa-exclamation-triangle"></i> Error al cargar el árbol de decisión</h4>
+                                <p>El formato del árbol no es válido. Por favor, intenta regenerar el material.</p>
+                                <details style="margin-top: 15px;">
+                                    <summary style="cursor: pointer; color: #0056b3; font-weight: 600;">Ver detalles técnicos</summary>
+                                    <pre style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 11px; margin-top: 10px;">${material.html_content}</pre>
+                                </details>
+                            </div>
+                        `).fadeIn();
+                        
+                        trackMaterialView(material.id);
+                        return;
+                    }
+                }
+                
+                // Validar estructura del JSON
+                if (!arbolData || !arbolData.datos || !arbolData.datos.nodos) {
+                    console.error('❌ Estructura de árbol inválida:', arbolData);
+                    $('#loadingSpinner').hide();
+                    $('#materialContent').html(`
+                        <div class="alert alert-warning">
+                            <h4><i class="fas fa-exclamation-circle"></i> Estructura de árbol incompleta</h4>
+                            <p>El árbol no tiene la estructura esperada. Faltan campos obligatorios.</p>
+                            <p><strong>Se esperaba:</strong> <code>{"datos": {"nodos": [...]}}</code></p>
+                        </div>
+                    `).fadeIn();
+                    trackMaterialView(material.id);
+                    return;
+                }
+                
+                console.log('✅ Estructura validada. Nodos encontrados:', arbolData.datos.nodos.length);
+                
+                // Renderizar el árbol
+                $('#loadingSpinner').hide();
+                renderizarArbolDecision(arbolData);
+                trackMaterialView(material.id);
+                return; // IMPORTANTE: Salir aquí
+            }
+            // ============================================
+            // FIN DETECCIÓN ÁRBOL
+            // ============================================
 
-            // CRÍTICO: NO se sanitizan las Flashcards (permite scripts)
+            // FLUJO ORIGINAL (Flashcards y otros materiales HTML)
             let cleanHTML;
             if (material.material_type === 'flashcard') {
-                // Para flashcards, se inserta el HTML directamente
                 cleanHTML = material.html_content;
                 console.log('⚠️ Flashcard: HTML insertado directamente (scripts permitidos)');
             } else {
-                // Para otros materiales, se sanitiza
                 cleanHTML = DOMPurify.sanitize(material.html_content, {
                     ADD_TAGS: ['style', 'script'],
                     ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
@@ -368,21 +445,17 @@
                 console.log('✅ Material sanitizado con DOMPurify');
             }
 
-            // Se oculta el spinner de carga
             $('#loadingSpinner').hide();
             
-            // Se inserta el HTML en el contenedor
             const contentDiv = $('#materialContent');
             contentDiv.html(cleanHTML).fadeIn();
             
-            // Se ejecutan manualmente los scripts para las flashcards
             if (material.material_type === 'flashcard') {
                 const scripts = contentDiv.find('script');
                 scripts.each(function() {
                     const scriptContent = $(this).html();
                     if (scriptContent) {
                         try {
-                            // Se usa window.eval para asegurar el scope global
                             window.eval(scriptContent);
                             console.log('✅ Script ejecutado en window scope');
                         } catch (e) {
@@ -392,7 +465,6 @@
                 });
             }
             
-            // Se registra la visualización
             trackMaterialView(material.id);
         }
 
@@ -459,11 +531,405 @@
         // --- FIN DE NUEVA FUNCIÓN ---
 
         function trackMaterialView(materialId) {
-            const token = localStorage.getItem('access_token');
-            console.log('Material viewed:', materialId);
+                    const token = localStorage.getItem('access_token');
+                    console.log('Material viewed:', materialId);
+                }
+
+                // Las funciones printMaterial() y downloadMaterial() han sido ELIMINADAS
+
+                // ============================================
+                // FUNCIONES PARA ÁRBOL DE DECISIÓN
+                // ============================================
+
+                function renderizarArbolDecision(datos) {
+            const container = $('#materialContent');
+            
+            // Validar estructura de datos
+            if (!datos.datos || !datos.datos.nodos) {
+                container.html('<div class="alert alert-danger">Error: Estructura de árbol inválida</div>').fadeIn();
+                return;
+            }
+            
+            const html = `
+                <div id="arbol-container" style="width: 100%; height: 800px; background: #f8f9fa; border-radius: 12px; position: relative; overflow: hidden;">
+                    <svg id="arbol-svg" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#a8b5ff;stop-opacity:0.6" />
+                                <stop offset="100%" style="stop-color:#7dd3c0;stop-opacity:0.6" />
+                            </linearGradient>
+                        </defs>
+                        <g id="arbol-links"></g>
+                        <g id="arbol-nodes"></g>
+                    </svg>
+                    
+                    <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 1000;">
+                        <button onclick="zoomArbol(1.2)" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">+</button>
+                        <button onclick="zoomArbol(0.8)" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">−</button>
+                        <button onclick="resetZoomArbol()" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 16px;">⟲</button>
+                    </div>
+                </div>
+            `;
+            
+            container.html(html).fadeIn();
+            
+            // CRÍTICO: NO agregar animaciones automáticas en la carga inicial
+            // Solo aplicar transiciones suaves para cambios posteriores
+            const styleElement = document.createElement('style');
+            styleElement.id = 'arbol-styles';
+            styleElement.textContent = `
+                /* Transiciones suaves para cambios (NO para carga inicial) */
+                #arbol-nodes g {
+                    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                
+                #arbol-links path {
+                    transition: all 0.4s ease;
+                }
+            `;
+            
+            // Remover estilos anteriores si existen
+            const oldStyle = document.getElementById('arbol-styles');
+            if (oldStyle) oldStyle.remove();
+            
+            document.head.appendChild(styleElement);
+            
+            // Renderizar árbol inmediatamente
+            inicializarArbolForzado(datos.datos.nodos);
         }
 
-        // Las funciones printMaterial() y downloadMaterial() han sido ELIMINADAS
+        let arbolState = {
+            nodos: [],
+            nodosExpandidos: new Set(['raiz']),
+            escala: 1
+        };
+
+        function inicializarArbolForzado(nodosData) {
+            arbolState.nodos = nodosData;
+            arbolState.nodosExpandidos = new Set(['raiz']);
+            renderizarArbol();
+        }
+
+        function renderizarArbol() {
+            const nodosVisibles = obtenerNodosVisibles();
+            const enlaces = obtenerEnlacesVisibles(nodosVisibles);
+            
+            const width = $('#arbol-svg').width();
+            const height = $('#arbol-svg').height();
+            
+            const posiciones = calcularPosicionesJerarquicas(nodosVisibles, width, height);
+            
+            // Renderizar sin delay en la carga inicial
+            renderizarEnlaces(enlaces, posiciones);
+            renderizarNodos(nodosVisibles, posiciones);
+        }
+
+        function obtenerNodosVisibles() {
+            return arbolState.nodos.filter(nodo => {
+                if (nodo.nivel === 0) return true;
+                return arbolState.nodosExpandidos.has(nodo.padre);
+            });
+        }
+
+        function obtenerEnlacesVisibles(nodosVisibles) {
+            const idsVisibles = new Set(nodosVisibles.map(n => n.id));
+            return nodosVisibles
+                .filter(nodo => nodo.padre && idsVisibles.has(nodo.padre))
+                .map(nodo => ({ source: nodo.padre, target: nodo.id }));
+        }
+
+        function calcularPosicionesJerarquicas(nodos, width, height) {
+            const posiciones = {};
+            const padding = 80;
+            
+            // Posiciones X fijas por nivel
+            const nivelX = {
+                0: 150,
+                1: width * 0.33,
+                2: width * 0.60,
+                3: width * 0.85
+            };
+            
+            // PASO 1: Agrupar nodos por nivel
+            const porNivel = {};
+            nodos.forEach(nodo => {
+                if (!porNivel[nodo.nivel]) porNivel[nodo.nivel] = [];
+                porNivel[nodo.nivel].push(nodo);
+            });
+            
+            // PASO 2: Posicionar la raíz (siempre centrada)
+            const raiz = nodos.find(n => n.nivel === 0);
+            if (raiz) {
+                posiciones[raiz.id] = { x: nivelX[0], y: height / 2 };
+            }
+            
+            // PASO 3: Para cada nivel (1, 2, 3), distribuir TODOS los nodos uniformemente
+            [1, 2, 3].forEach(nivelActual => {
+                const nodosDelNivel = porNivel[nivelActual] || [];
+                if (nodosDelNivel.length === 0) return;
+                
+                const numNodos = nodosDelNivel.length;
+                const espacioDisponible = height - (2 * padding);
+                
+                // DISTRIBUCIÓN UNIFORME: dividir el espacio verticalmente
+                const espacioPorNodo = espacioDisponible / Math.max(numNodos - 1, 1);
+                
+                // Posicionar cada nodo equidistantemente
+                nodosDelNivel.forEach((nodo, index) => {
+                    let y;
+                    
+                    if (numNodos === 1) {
+                        // Si hay un solo nodo, centrarlo
+                        y = height / 2;
+                    } else {
+                        // Distribuir uniformemente de arriba a abajo
+                        y = padding + (index * espacioPorNodo);
+                    }
+                    
+                    posiciones[nodo.id] = {
+                        x: nivelX[nivelActual],
+                        y: y
+                    };
+                });
+            });
+            
+            return posiciones;
+        }
+
+        function renderizarEnlaces(enlaces, posiciones) {
+            const linksGroup = document.getElementById('arbol-links');
+            linksGroup.innerHTML = '';
+            
+            enlaces.forEach(enlace => {
+                const source = posiciones[enlace.source];
+                const target = posiciones[enlace.target];
+                
+                if (!source || !target) return;
+                
+                const midX = (source.x + target.x) / 2;
+                const path = `M ${source.x} ${source.y} Q ${midX} ${source.y}, ${midX} ${(source.y + target.y) / 2} Q ${midX} ${target.y}, ${target.x} ${target.y}`;
+                
+                const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                pathElement.setAttribute('d', path);
+                pathElement.setAttribute('stroke', 'url(#lineGradient)');
+                pathElement.setAttribute('stroke-width', '2');
+                pathElement.setAttribute('fill', 'none');
+                pathElement.setAttribute('opacity', '0.6');
+                
+                linksGroup.appendChild(pathElement);
+            });
+        }
+
+        function renderizarNodos(nodos, posiciones) {
+    const nodesGroup = document.getElementById('arbol-nodes');
+    
+    // NUEVO: Obtener nodos existentes para animar transiciones
+    const nodosExistentes = new Map();
+    Array.from(nodesGroup.children).forEach(nodoDOM => {
+        const nodoId = nodoDOM.dataset.nodoId;
+        if (nodoId) {
+            nodosExistentes.set(nodoId, nodoDOM);
+        }
+    });
+    
+    // Conjunto de IDs de nodos que deben estar visibles
+    const nodosVisiblesIds = new Set(nodos.map(n => n.id));
+    
+    // PASO 1: Animar salida de nodos que ya no están
+    nodosExistentes.forEach((nodoDOM, nodoId) => {
+        if (!nodosVisiblesIds.has(nodoId)) {
+            nodoDOM.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+            nodoDOM.style.opacity = '0';
+            nodoDOM.style.transform = nodoDOM.getAttribute('transform') + ' scale(0.5)';
+            setTimeout(() => {
+                if (nodoDOM.parentNode) {
+                    nodoDOM.remove();
+                }
+            }, 400);
+        }
+    });
+    
+    // PASO 2: Crear o actualizar nodos visibles
+    nodos.forEach((nodo, index) => {
+        const pos = posiciones[nodo.id];
+        if (!pos) return;
+        
+        const estilo = obtenerEstiloNodo(nodo.nivel, nodo.es_tema_debil);
+        const tieneHijos = arbolState.nodos.some(n => n.padre === nodo.id);
+        const estaExpandido = arbolState.nodosExpandidos.has(nodo.id);
+        
+        // Verificar si el nodo ya existe
+        let g = nodosExistentes.get(nodo.id);
+        const esNuevo = !g;
+        
+        if (!g) {
+            // Crear nuevo nodo
+            g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.dataset.nodoId = nodo.id;
+            g.style.opacity = '0';
+            g.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+            nodesGroup.appendChild(g);
+        } else {
+            // Actualizar transición para nodos existentes
+            g.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+        }
+        
+        // Actualizar posición
+        g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+        g.style.cursor = 'pointer';
+        
+        // Animar entrada para nodos nuevos con efecto cascada
+        // Mostrar inmediatamente (sin animación en carga inicial)
+        g.style.opacity = '1';
+        
+        // Limpiar contenido anterior
+        g.innerHTML = '';
+        
+        // Calcular ancho del nodo
+        const ancho = calcularAnchoNodo(nodo.texto);
+        
+        // Crear rectángulo del nodo
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', -ancho / 2);
+        rect.setAttribute('y', -20);
+        rect.setAttribute('width', ancho);
+        rect.setAttribute('height', 40);
+        rect.setAttribute('rx', estilo.borderRadius);
+        rect.setAttribute('fill', estilo.background);
+        rect.setAttribute('stroke', estilo.border);
+        rect.setAttribute('stroke-width', nodo.es_tema_debil ? '3' : '2');
+        rect.style.filter = 'drop-shadow(0 2px 8px rgba(0,0,0,0.1))';
+        rect.style.transition = 'all 0.3s ease';
+        
+        // Crear texto del nodo
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dy', '0.35em');
+        text.setAttribute('fill', estilo.color);
+        text.setAttribute('font-size', estilo.fontSize);
+        text.setAttribute('font-weight', estilo.fontWeight);
+        text.textContent = nodo.texto.length > 40 ? nodo.texto.substring(0, 37) + '...' : nodo.texto;
+        
+        g.appendChild(rect);
+        g.appendChild(text);
+        
+        // Agregar botón de expandir/colapsar si tiene hijos
+        if (tieneHijos) {
+            const boton = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            boton.setAttribute('transform', `translate(${ancho / 2 + 15}, 0)`);
+            boton.style.transition = 'transform 0.3s ease';
+            
+            const circulo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circulo.setAttribute('r', '12');
+            circulo.setAttribute('fill', estilo.buttonBackground);
+            circulo.setAttribute('stroke', estilo.border);
+            circulo.setAttribute('stroke-width', '2');
+            circulo.style.transition = 'all 0.3s ease';
+            
+            const icono = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            icono.setAttribute('text-anchor', 'middle');
+            icono.setAttribute('dy', '0.35em');
+            icono.setAttribute('fill', estilo.buttonColor);
+            icono.setAttribute('font-size', '14');
+            icono.setAttribute('font-weight', 'bold');
+            icono.textContent = estaExpandido ? '<' : '>';
+            icono.style.transition = 'transform 0.3s ease';
+            
+            boton.appendChild(circulo);
+            boton.appendChild(icono);
+            g.appendChild(boton);
+            
+            // Efecto hover para el botón
+            boton.addEventListener('mouseenter', () => {
+                circulo.style.transform = 'scale(1.1)';
+            });
+            boton.addEventListener('mouseleave', () => {
+                circulo.style.transform = 'scale(1)';
+            });
+        }
+        
+        // Event listener para expandir/colapsar
+        g.addEventListener('click', (e) => {
+            // Efecto visual de click
+            rect.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                rect.style.transform = 'scale(1)';
+            }, 150);
+            
+            // Ejecutar toggle
+            toggleNodo(nodo.id);
+        });
+        
+        // Efecto hover para todo el nodo
+        g.addEventListener('mouseenter', () => {
+            rect.style.filter = 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))';
+            rect.style.transform = 'scale(1.03)';
+        });
+        
+        g.addEventListener('mouseleave', () => {
+            rect.style.filter = 'drop-shadow(0 2px 8px rgba(0,0,0,0.1))';
+            rect.style.transform = 'scale(1)';
+        });
+    });
+}
+
+        function obtenerEstiloNodo(nivel, esTemaDebil) {
+            const estilos = {
+                0: { background: '#9b87f5', border: '#7e69d1', color: 'white', fontSize: '16px', fontWeight: 'bold', borderRadius: '20', buttonBackground: '#7e69d1', buttonColor: 'white' },
+                1: { background: '#a8b5ff', border: '#8fa3ff', color: '#1a1a2e', fontSize: '14px', fontWeight: '600', borderRadius: '16', buttonBackground: '#8fa3ff', buttonColor: 'white' },
+                2: { background: '#7dd3c0', border: '#5cbfab', color: '#1a1a2e', fontSize: '13px', fontWeight: '500', borderRadius: '12', buttonBackground: '#5cbfab', buttonColor: 'white' },
+                3: { background: '#a0e7d4', border: '#7dd3c0', color: '#1a1a2e', fontSize: '12px', fontWeight: 'normal', borderRadius: '8', buttonBackground: '#7dd3c0', buttonColor: 'white' }
+            };
+            
+            const estilo = estilos[nivel] || estilos[3];
+            
+            if (esTemaDebil) {
+                estilo.border = '#dc3545';
+                estilo.background = nivel === 0 ? '#9b87f5' : (nivel === 1 ? '#ffebee' : '#ffcdd2');
+            }
+            
+            return estilo;
+        }
+
+        function calcularAnchoNodo(texto) {
+            return Math.max(120, Math.min(300, texto.length * 8 + 40));
+        }
+
+        function toggleNodo(nodoId) {
+            if (arbolState.nodosExpandidos.has(nodoId)) {
+                arbolState.nodosExpandidos.delete(nodoId);
+                colapsarDescendientes(nodoId);
+            } else {
+                arbolState.nodosExpandidos.add(nodoId);
+            }
+            renderizarArbol();
+        }
+
+        function colapsarDescendientes(nodoId) {
+            const hijos = arbolState.nodos.filter(n => n.padre === nodoId);
+            hijos.forEach(hijo => {
+                arbolState.nodosExpandidos.delete(hijo.id);
+                colapsarDescendientes(hijo.id);
+            });
+        }
+
+        function zoomArbol(factor) {
+            arbolState.escala *= factor;
+            aplicarTransformacion();
+        }
+
+        function resetZoomArbol() {
+            arbolState.escala = 1;
+            aplicarTransformacion();
+        }
+
+        function aplicarTransformacion() {
+            const nodesGroup = document.getElementById('arbol-nodes');
+            const linksGroup = document.getElementById('arbol-links');
+            const transform = `scale(${arbolState.escala})`;
+            nodesGroup.setAttribute('transform', transform);
+            linksGroup.setAttribute('transform', transform);
+        }
     </script>
 </body>
 </html>

@@ -174,8 +174,38 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         # Se extrae el contenido HTML
         html_content = response.text.strip()
         
-        # Se limpia el markdown si está presente
-        if html_content.startswith('```html'):
+        # NUEVO: Limpieza especial para árboles de decisión (JSON)
+        if material_type == 'decision_tree':
+            # Limpiar markdown JSON
+            if html_content.startswith('```json'):
+                html_content = html_content.replace('```json', '').replace('```', '').strip()
+            elif html_content.startswith('```'):
+                html_content = html_content.replace('```', '').strip()
+            
+            # Validar que sea JSON válido
+            import json
+            try:
+                # Intentar parsear para validar
+                parsed_json = json.loads(html_content)
+                # Re-serializar limpio (sin escapes innecesarios)
+                html_content = json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                logger.info(f"✅ JSON del árbol validado y limpiado ({len(parsed_json.get('datos', {}).get('nodos', []))} nodos)")
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Error validando JSON del árbol: {e}")
+                # Si falla, intentar extraer JSON del texto
+                import re
+                json_match = re.search(r'\{.*\}', html_content, re.DOTALL)
+                if json_match:
+                    html_content = json_match.group(0)
+                    try:
+                        parsed_json = json.loads(html_content)
+                        html_content = json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                        logger.info("✅ JSON extraído y validado mediante regex")
+                    except:
+                        logger.error("❌ No se pudo validar el JSON del árbol")
+        
+        # Limpieza para otros tipos (HTML)
+        elif html_content.startswith('```html'):
             html_content = html_content.replace('```html', '').replace('```', '').strip()
         elif html_content.startswith('```'):
             html_content = html_content.replace('```', '').strip()

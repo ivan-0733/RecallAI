@@ -231,29 +231,233 @@ IMPORTANTE:
 
 
 def get_decision_tree_prompt(text_title, text_topic, weak_topics, review_topics, incorrect_questions_text, text_content_preview):
-    """Prompt para Árbol de Decisión"""
+    """Prompt para Árbol de Decisión con algoritmo force-directed"""
     
     # Se definen los strings de temas
     weak_topics_str = ", ".join(weak_topics) if weak_topics else "Ninguno"
     review_topics_str = ", ".join(review_topics) if review_topics else "Ninguno"
     
-    return f"""Crea un árbol de decisión interactivo en HTML sobre: {text_topic}
+    # Determinar si hay temas débiles
+    tiene_temas_debiles = weak_topics_str != "Ninguno"
+    enfoque_texto = ""
+    
+    if tiene_temas_debiles:
+        enfoque_texto = f"""
+ENFOQUE ADAPTATIVO (REGLA 75/25):
+- **75% del árbol**: Enfócate en los temas débiles del estudiante: {weak_topics_str}
+  → Crea más nodos, subtemas y detalles sobre estos conceptos
+  → Profundiza en ejemplos, casos de uso y explicaciones detalladas
+  
+- **25% del árbol**: Incluye temas de repaso general: {review_topics_str}
+  → Estos deben ser ramas más pequeñas, con menos profundidad
+  → Sirven como contexto, pero no son el foco principal
+"""
+    else:
+        enfoque_texto = f"""
+ENFOQUE GENERAL:
+Como no hay temas débiles identificados, crea un árbol balanceado que cubra:
+- Conceptos fundamentales del tema
+- Aplicaciones prácticas
+- Métricas y evaluación
+- Casos especiales o avanzados
+"""
+    
+    return f"""Genera un árbol de decisión interactivo sobre: "{text_topic}"
 
-INSTRUCCIONES CRÍTICAS DE ENFOQUE (LÓGICA 75/25):
-El árbol debe reflejar esta proporción de contenido:
-1.  **ENFOQUE PRINCIPAL (75% del árbol):** Las ramas principales deben enfocarse en los temas débiles del alumno. Usa COLOR ROJO para estos nodos. Temas: {weak_topics_str}
-2.  **ENFOQUE DE REPASO (25% del árbol):** Incluye ramas secundarias o nodos de repaso sobre temas generales. Usa COLOR VERDE para estos. Temas: {review_topics_str}
+{enfoque_texto}
 
-TEMAS DÉBILES: {weak_topics_str}
+ESTRUCTURA JSON REQUERIDA (RESPONDE SOLO CON ESTE JSON):
+{{
+  "tipo": "arbol_decision",
+  "titulo": "{text_topic}",
+  "datos": {{
+    "nodos": [
+      {{
+        "id": "raiz",
+        "texto": "Título del concepto central",
+        "nivel": 0,
+        "padre": null,
+        "tipo": "raiz"
+      }},
+      {{
+        "id": "cat_1",
+        "texto": "Primera Categoría Principal",
+        "nivel": 1,
+        "padre": "raiz",
+        "tipo": "categoria",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "sub_1_1",
+        "texto": "Subtema 1.1",
+        "nivel": 2,
+        "padre": "cat_1",
+        "tipo": "subtema",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_1_1_1",
+        "texto": "Detalle específico o ejemplo",
+        "nivel": 3,
+        "padre": "sub_1_1",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }}
+    ]
+  }}
+}}
 
-Genera HTML completo con:
-- Nodos colapsables (botones con onclick)
-- Colores: rojo para temas débiles, verde para dominados (repaso)
-- Código Python en nodos finales
-- CSS inline
-- JavaScript para colapsar/expandir
+REGLAS CRÍTICAS:
+1. **Niveles jerárquicos:**
+   - Nivel 0: 1 solo nodo raíz (el concepto más general)
+   - Nivel 1: 3-5 categorías principales
+   - Nivel 2: 3-7 subtemas por categoría
+   - Nivel 3: 2-5 detalles/ejemplos por subtema
 
-Responde SOLO con HTML completo, sin explicaciones."""
+2. **IDs únicos:** Usa formato: raiz, cat_1, cat_2, sub_1_1, sub_1_2, det_1_1_1, etc.
+
+3. **Texto conciso:** Máximo 50 caracteres por nodo. Usa frases cortas y directas.
+
+4. **Marcado de temas débiles:** Si el nodo trata un tema débil ({weak_topics_str}), agrega `"es_tema_debil": true`
+
+5. **Proporción 75/25:** 
+   - Si hay temas débiles, el 75% de los nodos (especialmente nivel 2 y 3) deben ser sobre {weak_topics_str}
+   - Solo el 25% debe ser repaso ({review_topics_str})
+
+6. **Cada nodo hijo debe tener exactamente 1 padre**
+
+7. **Profundidad variable:** 
+   - Temas débiles: desarrolla hasta nivel 3 con muchos detalles
+   - Temas de repaso: puedes quedarte en nivel 2
+
+EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métricas"):
+
+{{
+  "tipo": "arbol_decision",
+  "titulo": "Aprendizaje Supervisado: Regresión y Clasificación",
+  "datos": {{
+    "nodos": [
+      {{
+        "id": "raiz",
+        "texto": "Aprendizaje Supervisado",
+        "nivel": 0,
+        "padre": null,
+        "tipo": "raiz"
+      }},
+      {{
+        "id": "cat_regresion",
+        "texto": "Regresión y Correlación",
+        "nivel": 1,
+        "padre": "raiz",
+        "tipo": "categoria",
+        "es_tema_debil": false
+      }},
+      {{
+        "id": "sub_reg_proposito",
+        "texto": "Propósito",
+        "nivel": 2,
+        "padre": "cat_regresion",
+        "tipo": "subtema",
+        "es_tema_debil": false
+      }},
+      {{
+        "id": "cat_metricas",
+        "texto": "Métricas de Evaluación",
+        "nivel": 1,
+        "padre": "raiz",
+        "tipo": "categoria",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "sub_matriz_confusion",
+        "texto": "Matriz de Confusión",
+        "nivel": 2,
+        "padre": "cat_metricas",
+        "tipo": "subtema",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_matriz_tp",
+        "texto": "Verdaderos Positivos (TP)",
+        "nivel": 3,
+        "padre": "sub_matriz_confusion",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_matriz_fp",
+        "texto": "Falsos Positivos (FP)",
+        "nivel": 3,
+        "padre": "sub_matriz_confusion",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "sub_precision",
+        "texto": "Precisión (Precision)",
+        "nivel": 2,
+        "padre": "cat_metricas",
+        "tipo": "subtema",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_precision_formula",
+        "texto": "Fórmula: TP / (TP + FP)",
+        "nivel": 3,
+        "padre": "sub_precision",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_precision_uso",
+        "texto": "Útil cuando el costo de FP es alto",
+        "nivel": 3,
+        "padre": "sub_precision",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "sub_recall",
+        "texto": "Recall (Exhaustividad)",
+        "nivel": 2,
+        "padre": "cat_metricas",
+        "tipo": "subtema",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_recall_formula",
+        "texto": "Fórmula: TP / (TP + FN)",
+        "nivel": 3,
+        "padre": "sub_recall",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "sub_f1_score",
+        "texto": "F1 Score",
+        "nivel": 2,
+        "padre": "cat_metricas",
+        "tipo": "subtema",
+        "es_tema_debil": true
+      }},
+      {{
+        "id": "det_f1_balance",
+        "texto": "Balancea Precisión y Recall",
+        "nivel": 3,
+        "padre": "sub_f1_score",
+        "tipo": "detalle",
+        "es_tema_debil": true
+      }}
+    ]
+  }}
+}}
+
+CONTEXTO DEL ESTUDIANTE:
+- Temas débiles identificados: {weak_topics_str}
+- Temas para repaso: {review_topics_str}
+- Material de referencia: {text_content_preview[:500]}...
+
+IMPORTANTE: Responde ÚNICAMENTE con el JSON. No incluyas texto adicional, explicaciones ni markdown. El JSON debe ser válido y estar completo."""
 
 
 def get_mind_map_prompt(text_title, text_topic, weak_topics, review_topics, text_content_preview):
