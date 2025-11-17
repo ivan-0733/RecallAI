@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from django.urls import reverse, path
 from django.contrib import messages
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect, render, get_object_or_404
 from django.db.models import Sum, Avg, Count, F, Q
 from django.utils import timezone
 from datetime import timedelta
@@ -57,237 +57,116 @@ class PDITextAdmin(admin.ModelAdmin):
             'fields': ('file', 'content', 'content_preview'),
             'description': 'Sube un PDF/TXT o pega el contenido manualmente. Si subes archivo, el contenido se extraerá automáticamente.'
         }),
-        ('⏱️ Estimaciones', {
-            'fields': ('estimated_time_minutes', 'word_count_display')
-        }),
-        ('📊 Estado del Cuestionario', {
-            'fields': ('has_quiz',),
+        ('📊 Estadísticas', {
+            'fields': ('word_count_display', 'estimated_time_minutes'),
             'classes': ('collapse',)
         }),
         ('🔍 Metadata', {
-            'fields': ('created_by', 'created_at', 'updated_at'),
+            'fields': ('has_quiz', 'created_by', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
     
-    actions = [
-        'activate_texts',
-        'archive_texts',
-        'generate_quizzes',
-        'regenerate_quizzes'
-    ]
+    actions = ['activate_texts', 'deactivate_texts', 'mark_as_published']
     
-    class Media:
-        js = ('admin/js/pdi_text_admin.js',)
-    
-    def get_urls(self):
-        """Agregar URL personalizada para generar quiz vía AJAX"""
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                '<int:text_id>/generate-quiz/',
-                self.admin_site.admin_view(self.generate_quiz_view),
-                name='pdi_texts_pditext_generate_quiz',
-            ),
-        ]
-        return custom_urls + urls
-    
-    def generate_quiz_view(self, request, text_id):
-        """Vista para generar quiz vía AJAX - Funciona igual que la acción masiva"""
-        try:
-            text = PDIText.objects.get(id=text_id)
-            
-            # Verificar si ya tiene contenido
-            if not text.content or text.content.strip() == "":
-                return JsonResponse({
-                    'status': 'error',
-                    'message': '❌ El texto no tiene contenido. Primero debes guardar el texto con contenido.'
-                }, status=400)
-            
-            # Verificar si ya tiene quiz
-            if hasattr(text, 'initial_quiz'):
-                return JsonResponse({
-                    'status': 'error',
-                    'message': '⚠️ Este texto ya tiene un cuestionario. Usa "RE-generar" si quieres crear uno nuevo.'
-                }, status=400)
-            
-            # Encolar tarea Celery (IGUAL QUE LA ACCIÓN MASIVA)
-            generate_initial_quiz.delay(text_id)
-            
-            # Mostrar mensaje en el admin (IGUAL QUE LA ACCIÓN MASIVA)
-            self.message_user(
-                request,
-                f"🚀 Se encoló la tarea para generar cuestionario de '{text.title}'. Esto puede tomar varios minutos.",
-                messages.SUCCESS
-            )
-            
-            return JsonResponse({
-                'status': 'success',
-                'message': f'🚀 Generando cuestionario para "{text.title}"... Esto puede tomar varios minutos.',
-                'reload': True  # ✅ NUEVO: indica al JS que debe recargar
-            })
-            
-        except PDIText.DoesNotExist:
-            return JsonResponse({
-                'status': 'error',
-                'message': '❌ Texto no encontrado'
-            }, status=404)
-        except Exception as e:
-            return JsonResponse({
-                'status': 'error',
-                'message': f'❌ Error: {str(e)}'
-            }, status=500)
-    
-    def save_model(self, request, obj, form, change):
-        """Al guardar, procesar archivo si se subió uno"""
-        
-        # Asignar usuario creador si es nuevo
-        if not change:
-            obj.created_by = request.user
-        
-        # Si se subió un archivo, extraer texto
-        if 'file' in form.changed_data and obj.file:
-            try:
-                file_extension = obj.file.name.split('.')[-1].lower()
-                
-                if file_extension == 'pdf':
-                    extracted_text, metadata = extract_text_from_pdf(obj.file)
-                    obj.content = extracted_text
-                    self.message_user(
-                        request,
-                        f"✅ Texto extraído exitosamente del PDF ({metadata['pages']} páginas, método: {metadata['method']})",
-                        messages.SUCCESS
-                    )
-                
-                elif file_extension == 'txt':
-                    obj.content = extract_text_from_txt(obj.file)
-                    self.message_user(
-                        request,
-                        "✅ Texto cargado exitosamente desde archivo TXT",
-                        messages.SUCCESS
-                    )
-                
-                # Auto-calcular tiempo estimado
-                if obj.content:
-                    obj.estimated_time_minutes = estimate_reading_time(obj.content)
-            
-            except Exception as e:
-                self.message_user(
-                    request,
-                    f"❌ Error al procesar archivo: {str(e)}",
-                    messages.ERROR
-                )
-        
-        # Validar que tenga contenido antes de guardar
-        if not obj.content or obj.content.strip() == "":
-            if obj.file:
-                self.message_user(
-                    request,
-                    "⚠️ No se pudo extraer texto del archivo. Verifica que sea un PDF/TXT válido.",
-                    messages.WARNING
-                )
-            else:
-                self.message_user(
-                    request,
-                    "⚠️ Debes proporcionar contenido o subir un archivo PDF/TXT.",
-                    messages.WARNING
-                )
-        
-        super().save_model(request, obj, form, change)
-    
-    # Custom display methods
-    def title_with_icon(self, obj):
-        icon = '📖'
-        return format_html(
-            '<span style="font-size: 14px;">{} <strong>{}</strong></span>',
-            icon, obj.title
-        )
-    title_with_icon.short_description = 'Título'
-    
-    def topic_badge(self, obj):
-        return format_html(
-            '<span class="badge badge-info">{}</span>',
-            obj.topic
-        )
-    topic_badge.short_description = 'Tema'
-    
-    def difficulty_badge(self, obj):
-        colors = {
-            'beginner': 'success',
-            'intermediate': 'warning',
-            'advanced': 'danger'
-        }
-        return format_html(
-            '<span class="badge badge-{}">{}</span>',
-            colors.get(obj.difficulty, 'secondary'),
-            obj.get_difficulty_display()
-        )
-    difficulty_badge.short_description = 'Dificultad'
-    
-    def status_badge(self, obj):
-        colors = {
-            'draft': 'secondary',
-            'active': 'success',
-            'archived': 'dark'
-        }
-        icons = {
-            'draft': '📝',
-            'active': '✅',
-            'archived': '📦'
-        }
-        return format_html(
-            '<span class="badge badge-{}">{} {}</span>',
-            colors.get(obj.status, 'secondary'),
-            icons.get(obj.status, ''),
-            obj.get_status_display()
-        )
-    status_badge.short_description = 'Estado'
-    
-    def has_quiz_icon(self, obj):
-        if obj.has_quiz:
-            return format_html(
-                '<span style="color: green; font-size: 18px;" title="Tiene cuestionario">✅</span>'
-            )
-        return format_html(
-            '<span style="color: red; font-size: 18px;" title="Sin cuestionario">❌</span>'
-        )
-    has_quiz_icon.short_description = 'Quiz'
-    
-    def word_count_display(self, obj):
-        count = obj.word_count()
-        return format_html(
-            '<span class="badge badge-primary">{} palabras</span>',
-            count
-        )
-    word_count_display.short_description = 'Palabras'
-    
+    # Mostrar campos read-only con formato
     def content_preview(self, obj):
         """Muestra preview del contenido"""
         if obj.content:
             preview = obj.content[:500] + '...' if len(obj.content) > 500 else obj.content
             return format_html(
-                '<div style="background: #f4f4f4; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto;">'
-                '<pre style="white-space: pre-wrap; font-size: 12px;">{}</pre>'
-                '</div>',
+                '<div style="white-space: pre-wrap; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">{}</div>',
                 preview
             )
-        return "Sin contenido"
-    content_preview.short_description = 'Vista Previa'
+        return '(Sin contenido)'
+    content_preview.short_description = 'Preview del Contenido'
+    
+    def title_with_icon(self, obj):
+        """Título con icono según difficulty"""
+        icons = {
+            'beginner': '🟢',
+            'intermediate': '🟡',
+            'advanced': '🔴'
+        }
+        icon = icons.get(obj.difficulty, '📄')
+        return format_html('{} {}', icon, obj.title)
+    title_with_icon.short_description = 'Título'
+    
+    def topic_badge(self, obj):
+        """Badge con el topic"""
+        return format_html(
+            '<span class="badge" style="background: #17a2b8; color: white; padding: 3px 8px; border-radius: 3px;">{}</span>',
+            obj.topic
+        )
+    topic_badge.short_description = 'Tema'
+    
+    def difficulty_badge(self, obj):
+        """Badge con la dificultad"""
+        colors = {
+            'beginner': '#28a745',
+            'intermediate': '#ffc107',
+            'advanced': '#dc3545'
+        }
+        color = colors.get(obj.difficulty, '#6c757d')
+        return format_html(
+            '<span style="background: {}; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">{}</span>',
+            color, obj.get_difficulty_display()
+        )
+    difficulty_badge.short_description = 'Dificultad'
+    
+    def status_badge(self, obj):
+        """Badge con el status"""
+        colors = {
+            'active': '#28a745',
+            'inactive': '#6c757d',
+            'draft': '#ffc107'
+        }
+        color = colors.get(obj.status, '#6c757d')
+        icons = {
+            'active': '✅',
+            'inactive': '⏸️',
+            'draft': '📝'
+        }
+        icon = icons.get(obj.status, '❓')
+        return format_html(
+            '{} <span style="background: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            icon, color, obj.get_status_display()
+        )
+    status_badge.short_description = 'Estado'
+    
+    def has_quiz_icon(self, obj):
+        """Icono si tiene quiz"""
+        if obj.has_quiz:
+            return format_html('<span style="font-size: 20px;" title="Tiene cuestionario">✅</span>')
+        return format_html('<span style="font-size: 20px;" title="Sin cuestionario">❌</span>')
+    has_quiz_icon.short_description = 'Quiz'
+    
+    def word_count_display(self, obj):
+        """Contador de palabras formateado"""
+        if not obj.content:
+            return '0 palabras'
+        
+        word_count = len(obj.content.split())
+        return format_html(
+            '<strong>{}</strong> palabras',
+            word_count
+        )
+    word_count_display.short_description = 'Palabras'
     
     def actions_column(self, obj):
-        """Columna con botones de acción"""
+        """Botones de acción"""
         buttons = []
         
-        # Ver/Editar texto
-        view_url = reverse('admin:pdi_texts_pditext_change', args=[obj.pk])
+        # Botón para ver el texto (frontend)
+        view_url = f'/texts/{obj.pk}/'
         buttons.append(
-            f'<a href="{view_url}" class="btn btn-sm btn-primary" title="Ver/Editar Texto">'
-            '<i class="fas fa-edit"></i></a>'
+            f'<a href="{view_url}" class="btn btn-sm btn-primary" target="_blank" title="Ver en frontend">'
+            '<i class="fas fa-eye"></i> <span class="d-none d-lg-inline">Ver</span></a>'
         )
         
-        # Botón de Quiz
+        # Botón para generar/ver quiz
         if not obj.has_quiz:
-            # Si NO tiene quiz: Botón para GENERAR
+            # Si NO tiene quiz: Botón para GENERAR (con loading en JS)
             generate_url = reverse('admin:pdi_texts_pditext_generate_quiz', args=[obj.pk])
             buttons.append(
                 f'<a href="javascript:void(0);" onclick="generateQuiz({obj.pk}, \'{generate_url}\');" '
@@ -320,208 +199,207 @@ class PDITextAdmin(admin.ModelAdmin):
         updated = queryset.update(status='active')
         self.message_user(
             request,
-            f"✅ {updated} texto(s) activado(s) exitosamente",
+            f'{updated} texto(s) activado(s) correctamente.',
             messages.SUCCESS
         )
-    activate_texts.short_description = "✅ Activar textos seleccionados"
+    activate_texts.short_description = 'Activar textos seleccionados'
     
-    def archive_texts(self, request, queryset):
-        """Archivar textos seleccionados"""
-        updated = queryset.update(status='archived')
+    def deactivate_texts(self, request, queryset):
+        """Desactivar textos seleccionados"""
+        updated = queryset.update(status='inactive')
         self.message_user(
             request,
-            f"📦 {updated} texto(s) archivado(s) exitosamente",
+            f'{updated} texto(s) desactivado(s) correctamente.',
             messages.SUCCESS
         )
-    archive_texts.short_description = "📦 Archivar textos seleccionados"
+    deactivate_texts.short_description = 'Desactivar textos seleccionados'
     
-    def generate_quizzes(self, request, queryset):
-        """Generar cuestionarios para textos sin quiz"""
-        texts_without_quiz = queryset.filter(has_quiz=False)
-        
-        if not texts_without_quiz.exists():
-            self.message_user(
-                request,
-                "ℹ️ Todos los textos seleccionados ya tienen cuestionario",
-                messages.INFO
-            )
-            return
-        
-        count = 0
-        for text in texts_without_quiz:
-            if text.content and text.content.strip():
-                generate_initial_quiz.delay(text.id)
-                count += 1
-            else:
+    def mark_as_published(self, request, queryset):
+        """Marcar como publicado"""
+        updated = queryset.update(status='active')
+        self.message_user(
+            request,
+            f'{updated} texto(s) marcado(s) como publicado(s).',
+            messages.SUCCESS
+        )
+    mark_as_published.short_description = 'Marcar como publicado'
+    
+    # Sobrescribir save_model para extraer texto de PDF/TXT
+    def save_model(self, request, obj, form, change):
+        """Extraer texto automáticamente si se sube archivo"""
+        if obj.file:
+            try:
+                file_ext = obj.file.name.split('.')[-1].lower()
+                
+                if file_ext == 'pdf':
+                    extracted_text = extract_text_from_pdf(obj.file.path)
+                elif file_ext == 'txt':
+                    extracted_text = extract_text_from_txt(obj.file.path)
+                else:
+                    extracted_text = None
+                
+                if extracted_text:
+                    obj.content = extracted_text
+                    self.message_user(
+                        request,
+                        f'✅ Texto extraído automáticamente del archivo ({len(extracted_text)} caracteres)',
+                        messages.SUCCESS
+                    )
+            except Exception as e:
                 self.message_user(
                     request,
-                    f"⚠️ '{text.title}' no tiene contenido, se omitió",
-                    messages.WARNING
+                    f'❌ Error al extraer texto: {str(e)}',
+                    messages.ERROR
                 )
         
-        if count > 0:
-            self.message_user(
-                request,
-                f"🚀 Se encolaron {count} tarea(s) para generar cuestionarios. Esto puede tomar varios minutos.",
-                messages.SUCCESS
-            )
-    generate_quizzes.short_description = "🚀 Generar cuestionarios (textos sin quiz)"
+        # Guardar sin generar el usuario automáticamente
+        if not change:  # Solo al crear
+            obj.created_by = request.user
+        
+        super().save_model(request, obj, form, change)
     
-    def regenerate_quizzes(self, request, queryset):
-        """Regenerar cuestionarios (elimina el existente)"""
-        count = 0
-        for text in queryset:
-            if not text.content or text.content.strip() == "":
-                self.message_user(
-                    request,
-                    f"⚠️ '{text.title}' no tiene contenido, se omitió",
-                    messages.WARNING
-                )
-                continue
-            
-            # Eliminar quiz existente si lo hay
-            if hasattr(text, 'initial_quiz'):
-                text.initial_quiz.delete()
-                text.has_quiz = False
-                text.save()
-            
-            # Generar nuevo
-            generate_initial_quiz.delay(text.id)
-            count += 1
+    # URLs personalizadas
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<int:text_id>/generate-quiz/',
+                self.admin_site.admin_view(self.generate_quiz_view),
+                name='pdi_texts_pditext_generate_quiz',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def generate_quiz_view(self, request, text_id):
+        """Vista para generar cuestionario asíncronamente"""
+        text = get_object_or_404(PDIText, pk=text_id)
         
-        if count > 0:
-            self.message_user(
-                request,
-                f"🔄 Se encolaron {count} tarea(s) para RE-generar cuestionarios.",
-                messages.WARNING
-            )
-    regenerate_quizzes.short_description = "🔄 RE-generar cuestionarios (sobrescribe existentes)"
+        if text.has_quiz:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Este texto ya tiene un cuestionario'
+            }, status=400)
+        
+        # Lanzar tarea asíncrona
+        task = generate_initial_quiz.delay(text_id)
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Generando cuestionario para "{text.title}"...',
+            'task_id': task.id
+        })
+    
+    # JavaScript inline para botones
+    class Media:
+        js = ('admin/js/quiz_generator.js',)
 
 
 @admin.register(InitialQuiz)
 class InitialQuizAdmin(admin.ModelAdmin):
     list_display = [
-        'quiz_title',
-        'text_link',
-        'total_questions',
-        'model_badge',
-        'generation_time_display',
-        'created_at',
-        'validation_status'
+        'text_title',
+        'questions_count',
+        'validation_status',
+        'created_at_formatted',
+        'questions_preview'
     ]
     
-    list_filter = ['model_used', 'created_at']
-    
-    search_fields = ['text__title']
+    list_filter = ['text__topic', 'text__difficulty', 'created_at']
+    search_fields = ['text__title', 'questions']
     
     readonly_fields = [
         'text',
-        'total_questions',
-        'generation_prompt',
-        'generation_time_seconds',
-        'model_used',
+        'questions',
         'created_at',
-        'updated_at',
         'questions_preview',
         'validation_result'
     ]
     
     fieldsets = (
-        ('📝 Información del Quiz', {
-            'fields': ('text', 'total_questions', 'model_used', 'generation_time_seconds')
+        ('📋 Información', {
+            'fields': ('text', 'created_at')
         }),
-        ('❓ Preguntas (JSON)', {
-            'fields': ('questions_json', 'questions_preview')
-        }),
-        ('🤖 Generación con IA', {
-            'fields': ('generation_prompt',),
-            'classes': ('collapse',)
-        }),
-        ('✅ Validación', {
-            'fields': ('validation_result',)
-        }),
-        ('🔍 Metadata', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
+        ('❓ Preguntas', {
+            'fields': ('questions', 'questions_preview', 'validation_result'),
+            'description': 'Las preguntas están en formato JSON. Usa el botón de preview para visualizarlas mejor.'
         }),
     )
     
-    def has_add_permission(self, request):
-        """No permitir crear quizzes manualmente"""
-        return False
+    def text_title(self, obj):
+        return obj.text.title
+    text_title.short_description = 'Texto'
     
-    def quiz_title(self, obj):
-        return format_html(
-            '<span style="font-size: 14px;"><strong>{}</strong></span>',
-            f"Quiz: {obj.text.title}"
-        )
-    quiz_title.short_description = 'Título del Quiz'
-    
-    def text_link(self, obj):
-        url = reverse('admin:pdi_texts_pditext_change', args=[obj.text.pk])
-        return format_html(
-            '<a href="{}" class="btn btn-sm btn-outline-primary">'
-            '<i class="fas fa-book"></i> Ver Texto</a>',
-            url
-        )
-    text_link.short_description = 'Texto Asociado'
-    
-    def model_badge(self, obj):
-        return format_html(
-            '<span class="badge badge-success">{}</span>',
-            obj.model_used
-        )
-    model_badge.short_description = 'Modelo IA'
-    
-    def generation_time_display(self, obj):
-        if obj.generation_time_seconds:
+    def questions_count(self, obj):
+        """Contador de preguntas"""
+        try:
+            count = len(obj.questions.get('questions', []))
             return format_html(
-                '<span class="badge badge-info">{} seg</span>',
-                obj.generation_time_seconds
+                '<span class="badge badge-primary">{} preguntas</span>',
+                count
             )
-        return '-'
-    generation_time_display.short_description = 'Tiempo Gen.'
+        except:
+            return format_html('<span class="badge badge-danger">Error en JSON</span>')
+    questions_count.short_description = 'Total'
+    
+    def created_at_formatted(self, obj):
+        return obj.created_at.strftime('%d/%m/%Y %H:%M')
+    created_at_formatted.short_description = 'Creado'
     
     def questions_preview(self, obj):
-        """Muestra las preguntas de forma legible"""
-        questions = obj.get_questions()
-        
-        if not questions:
-            return "Sin preguntas"
-        
-        html = '<div style="max-height: 400px; overflow-y: auto;">'
-        
-        for i, q in enumerate(questions, 1):
-            html += f'''
-            <div style="background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-left: 4px solid #007bff; border-radius: 4px;">
-                <h4 style="color: #007bff; margin-top: 0;">Pregunta {i}</h4>
-                <p style="font-size: 14px; font-weight: bold;">{q.get('pregunta', 'N/A')}</p>
-                
-                <div style="margin: 10px 0;">
-                    <strong>Opciones:</strong>
-                    <ul style="margin: 5px 0;">
-            '''
+        """Vista previa de las preguntas en formato HTML"""
+        try:
+            questions = obj.questions.get('questions', [])
             
-            for opcion in q.get('opciones', []):
-                is_correct = opcion.startswith(q.get('respuesta_correcta', ''))
-                color = 'green' if is_correct else 'black'
-                icon = '✅' if is_correct else ''
-                html += f'<li style="color: {color};">{opcion} {icon}</li>'
+            if not questions:
+                return format_html('<p class="text-muted">No hay preguntas disponibles</p>')
             
-            html += f'''
-                    </ul>
-                </div>
+            html = '<div style="max-height: 600px; overflow-y: auto;">'
+            
+            for idx, q in enumerate(questions, 1):
+                html += f'''
+                <div class="card mb-3" style="border: 1px solid #ddd;">
+                    <div class="card-header" style="background: #f5f5f5; font-weight: bold;">
+                        Pregunta {idx} - Tema: {q.get('tema', 'N/A')}
+                    </div>
+                    <div class="card-body">
+                        <p style="font-weight: bold; margin-bottom: 10px;">{q.get('pregunta', '')}</p>
+                        
+                        <div class="list-group">
+                '''
                 
-                <div style="background: #e8f5e9; padding: 8px; border-radius: 4px; margin-top: 10px;">
-                    <strong>📌 Tema:</strong> <span class="badge badge-info">{q.get('tema', 'N/A')}</span>
-                </div>
+                opciones = q.get('opciones', [])
+                respuesta_correcta = q.get('respuesta_correcta', '')
                 
-                <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 5px;">
-                    <strong>💡 Explicación:</strong> {q.get('explicacion', 'N/A')}
+                for letra, opcion in zip(['A', 'B', 'C', 'D'], opciones):
+                    is_correct = (letra == respuesta_correcta)
+                    color = 'success' if is_correct else 'light'
+                    icon = '✅' if is_correct else ''
+                    
+                    html += f'''
+                        <div class="list-group-item list-group-item-{color}">
+                            {icon} <strong>{letra})</strong> {opcion}
+                        </div>
+                    '''
+                
+                html += f'''
+                        </div>
+                        <div class="alert alert-info mt-3" style="margin-bottom: 0;">
+                            <strong>Explicación:</strong> {q.get('explicacion', 'N/A')}
+                        </div>
+                    </div>
                 </div>
-            </div>
-            '''
+                '''
+            
+            html += '</div>'
+            
+            return format_html(html)
         
+        except Exception as e:
+            return format_html(
+                '<div class="alert alert-danger">Error al mostrar preview: {}</div>',
+                str(e)
+            )
+   
         html += '</div>'
         
         return format_html(html)
@@ -632,8 +510,20 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
     list_filter = ['material_type', 'was_effective', 'requested_at', 'text__title']
     search_fields = ['user__email', 'text__title', 'weak_topics']
     
+    # ✅ CORRECCIÓN PROBLEMA 5: Eliminar acción de eliminar por defecto de Django
     # Acción para eliminar solo el material y no el intento de quiz
     actions = ['delete_selected_materials_only']
+    
+    def get_actions(self, request):
+        """
+        Sobrescribir para remover la acción 'delete_selected' de Django
+        y dejar solo nuestra acción personalizada
+        """
+        actions = super().get_actions(request)
+        # Eliminar la acción por defecto de Django
+        if 'delete_selected' in actions:
+            del actions['delete_selected']
+        return actions
     
     readonly_fields = [
         'analytics_dashboard_panel', # <--- AQUÍ ESTÁ TU PANEL CENTRALIZADO
@@ -650,81 +540,122 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
             'classes': ('wide',),
             'description': 'Resumen total de actividad para este material específico.'
         }),
-        ('👤 Contexto del Alumno', {
-            'fields': ('user', 'associated_quiz_link_detailed', 'text', 'weak_topics')
+        ('📋 Información del Material', {
+            'fields': ('user', 'text', 'material_type', 'requested_at', 'generated_at', 'generation_time_seconds')
         }),
-        ('📄 Contenido Generado', {
-            'fields': ('material_type', 'html_content_preview', 'generated_at'),
+        ('🔗 Quiz de Origen', {
+            'fields': ('attempt', 'associated_quiz_link_detailed'),
+            'description': 'El intento de quiz que originó este material didáctico.'
+        }),
+        ('📝 Contenido HTML', {
+            'fields': ('html_content_preview',),
             'classes': ('collapse',)
         }),
-        ('⚙️ Metadatos Técnicos', {
-            'fields': ('generation_time_seconds', 'was_effective'),
+        ('🎯 Temas Enfocados', {
+            'fields': ('weak_topics',),
             'classes': ('collapse',)
+        }),
+        ('✅ Efectividad', {
+            'fields': ('was_effective',),
         })
     )
 
-    # --- VISTAS PERSONALIZADAS EN COLUMNAS ---
+    # --- COLUMNAS DE DISPLAY ---
 
     def material_type_badge(self, obj):
-        icons = {
-            'flashcard': '📇',
-            'decision_tree': '🌳',
-            'mind_map': '🧠',
-            'summary': '📄'
+        badges = {
+            'flashcard': ('📇', 'info', 'Flashcards'),
+            'decision_tree': ('🌳', 'success', 'Mapa Conceptual'),
+            'mind_map': ('🧠', 'primary', 'Mapa Mental'),
+            'summary': ('📄', 'secondary', 'Resumen')
         }
+        icon, color, label = badges.get(obj.material_type, ('📚', 'secondary', 'Desconocido'))
         return format_html(
-            '<span style="font-size: 1.1em;">{} {}</span>',
-            icons.get(obj.material_type, '📦'),
-            obj.get_material_type_display()
+            '{} <span class="badge badge-{}">{}</span>',
+            icon, color, label
         )
-    material_type_badge.short_description = "Material"
+    material_type_badge.short_description = 'Tipo'
 
     def user_link(self, obj):
+        from django.urls import reverse
         url = reverse('admin:application_user_user_change', args=[obj.user.pk])
-        return format_html('<a href="{}">👤 {}</a>', url, obj.user.email.split('@')[0])
-    user_link.short_description = "Alumno"
+        return format_html(
+            '<a href="{}">{}</a>',
+            url, obj.user.email
+        )
+    user_link.short_description = 'Usuario'
 
     def text_link(self, obj):
-        return obj.text.title[:20] + "..."
-    text_link.short_description = "Tema PDI"
-
-    def created_at_formatted(self, obj):
-        return obj.requested_at.strftime("%d/%m %H:%M")
-    created_at_formatted.short_description = "Creado"
-    
-    def was_effective_icon(self, obj):
-        if obj.was_effective is None: return "-"
-        return "✅" if obj.was_effective else "❌"
-    was_effective_icon.short_description = "Efectivo"
+        from django.urls import reverse
+        url = reverse('admin:pdi_texts_pditext_change', args=[obj.text.pk])
+        return format_html(
+            '<a href="{}">{}</a>',
+            url, obj.text.title[:40]
+        )
+    text_link.short_description = 'Texto'
 
     def stats_summary_columns(self, obj):
-        """Calcula y muestra totales rápidos en la lista principal"""
-        # Calcular totales sobre las sesiones hijas
-        sessions = obj.study_sessions.all()
-        count = sessions.count()
+        """
+        Muestra las stats acumuladas en formato compacto de columnas.
+        """
+        stats = obj.get_aggregated_stats()
         
-        # Agregar chequeo para evitar error si devuelve None
-        aggregates = sessions.aggregate(t=Sum('total_time_seconds'))
-        total_time = aggregates.get('t') or 0
+        # Formatear tiempos
+        def format_time(seconds):
+            mins = seconds // 60
+            secs = seconds % 60
+            return f"{mins}m {secs}s"
         
-        # FIX: Formatear el número a string ANTES de pasarlo a format_html para evitar ValueError
-        total_time_minutes = f"{total_time / 60:.1f}"
+        total_time_fmt = format_time(stats['total_time'])
+        active_time_fmt = format_time(stats['active_time'])
         
-        return format_html(
-            '<div style="font-size: 0.9em;">'
-            '👁️ <b>{}</b> Sesiones<br>'
-            '⏱️ <b>{}m</b> Totales'
-            '</div>',
-            count,
-            total_time_minutes
-        )
-    stats_summary_columns.short_description = "Resumen Uso"
+        # Colores para completion
+        completion_color = 'green' if stats['avg_completion'] > 70 else 'orange'
+        
+        html = f"""
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <div style="text-align: center;">
+                <div style="font-size: 0.75em; color: #666;">Sesiones</div>
+                <div style="font-weight: bold; font-size: 1.1em;">{stats['total_sessions']}</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 0.75em; color: #666;">Tiempo Total</div>
+                <div style="font-weight: bold; font-size: 1.1em;">{total_time_fmt}</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 0.75em; color: #666;">Tiempo Activo</div>
+                <div style="font-weight: bold; font-size: 1.1em;">{active_time_fmt}</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 0.75em; color: #666;">Interacciones</div>
+                <div style="font-weight: bold; font-size: 1.1em;">{stats['total_interactions']}</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 0.75em; color: #666;">Completado</div>
+                <div style="font-weight: bold; font-size: 1.1em; color: {completion_color};">{stats['avg_completion']:.0f}%</div>
+            </div>
+        </div>
+        """
+        return format_html(html)
+    stats_summary_columns.short_description = 'Estadísticas Acumuladas'
 
-    # --- PANEL CENTRALIZADO (DASHBOARD) ---
+    def created_at_formatted(self, obj):
+        return obj.requested_at.strftime('%d/%m/%Y %H:%M')
+    created_at_formatted.short_description = 'Creado'
+
+    def was_effective_icon(self, obj):
+        if obj.was_effective is None:
+            return format_html('<span style="font-size: 18px;" title="Sin evaluar">❔</span>')
+        elif obj.was_effective:
+            return format_html('<span style="font-size: 18px;" title="Efectivo">✅</span>')
+        else:
+            return format_html('<span style="font-size: 18px;" title="No efectivo">❌</span>')
+    was_effective_icon.short_description = 'Efectivo'
+
+    # --- READONLY FIELD CUSTOM ---
 
     def analytics_dashboard_panel(self, obj):
         """
-        Renderiza un dashboard HTML completo dentro del detalle del admin.
         Calcula y reúne TODA la información de tracking de todas las sesiones.
         """
         # Obtener todas las sesiones asociadas
@@ -772,30 +703,30 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
                         📚 Origen: {obj.text.title} (Quiz)
                     </p>
                     <p style="margin:0; color: #666; font-size: 0.9em;">
-                        Creado el {obj.requested_at.strftime('%d/%m/%Y a las %H:%M')} • Alumno: {obj.user.email}
+                        Creado el {obj.requested_at.strftime('%d/%m/%Y a las %H:%M')}
                     </p>
                 </div>
                 <div style="text-align: right;">
-                    <a href="{reverse('admin:pdi_texts_quizattempt_change', args=[obj.attempt.pk])}" class="button" style="background:#17a2b8;">
-                        Ver Quiz Origen (Score: {obj.attempt.score}%)
-                    </a>
+                    <span style="font-size: 3em;">📊</span>
                 </div>
             </div>
-
-            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 25px;">
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px;">
                 <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
                     <div style="font-size: 2em; font-weight: bold; color: #007bff;">{total_sessions}</div>
-                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Sesiones</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Sesiones Totales</div>
                 </div>
                 <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                    <div style="font-size: 2em; font-weight: bold; color: #6610f2;">{int(total_time // 60)}m {int(total_time % 60)}s</div>
+                    <div style="font-size: 2em; font-weight: bold; color: #17a2b8;">{total_time // 60}m {total_time % 60}s</div>
                     <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Tiempo Total</div>
-                    <small style="color: #999; font-size: 0.8em;">({int(total_active // 60)}m activos)</small>
                 </div>
                 <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                    <div style="font-size: 2em; font-weight: bold; color: #fd7e14;">{total_interactions}</div>
+                    <div style="font-size: 2em; font-weight: bold; color: #28a745;">{total_active // 60}m {total_active % 60}s</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Tiempo Activo</div>
+                </div>
+                <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: #6c757d;">{total_interactions}</div>
                     <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Interacciones</div>
-                    <small style="color: #999; font-size: 0.7em;">({total_clicks} clics, {total_scrolls} scrolls)</small>
                 </div>
                 <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
                     <div style="font-size: 2em; font-weight: bold; color: {engagement_color};">{avg_completion:.1f}%</div>
@@ -825,45 +756,49 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
                 </ul>
             </div>
 
-            <h3 style="margin-bottom: 10px; color: #444;">Historial de Sesiones</h3>
-            <table style="width: 100%; border-collapse: collapse; background: white;">
-                <thead style="background: #e9ecef;">
-                    <tr>
-                        <th style="padding: 8px; text-align: left;">Fecha</th>
-                        <th style="padding: 8px; text-align: left;">Duración (Activo)</th>
-                        <th style="padding: 8px; text-align: center;">Interacciones</th>
-                        <th style="padding: 8px; text-align: center;">Completado</th>
-                        <th style="padding: 8px; text-align: center;">Engagement</th>
-                        <th style="padding: 8px; text-align: right;">Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
+            <h3 style="margin-bottom: 10px; color: #444;">Historial de Sesiones de Estudio</h3>
         """
         
         if sessions.exists():
+            html += """
+            <table style="width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <thead>
+                    <tr style="background: #343a40; color: white;">
+                        <th style="padding: 10px; text-align: left;">Fecha</th>
+                        <th style="padding: 10px; text-align: center;">Duración</th>
+                        <th style="padding: 10px; text-align: center;">Activo</th>
+                        <th style="padding: 10px; text-align: center;">Interacciones</th>
+                        <th style="padding: 10px; text-align: center;">Completado</th>
+                        <th style="padding: 10px; text-align: center;">Engagement</th>
+                        <th style="padding: 10px; text-align: right;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            
             for sess in sessions:
-                heatmap_link = ""
-                if sess.heatmap_data.exists():
-                    url = reverse('admin:pdi_texts_studysession_heatmap', args=[sess.pk])
-                    heatmap_link = f'<a href="{url}" target="_blank" title="Ver Mapa de Calor">🔥</a>'
+                sess_date = sess.started_at.strftime('%d/%m/%Y %H:%M')
+                sess_duration = f"{sess.total_time_seconds // 60}m {sess.total_time_seconds % 60}s"
+                sess_active = f"{sess.active_time_seconds // 60}m {sess.active_time_seconds % 60}s"
+                sess_interactions = sess.total_interactions
+                scroll_depth = sess.max_scroll_depth or 0
+                sess_score = sess.engagement_score()
+                sess_score_color = '#28a745' if sess_score > 70 else '#ffc107' if sess_score > 40 else '#dc3545'
                 
                 sess_link = reverse('admin:pdi_texts_studysession_change', args=[sess.pk])
                 
-                # Calcular engagement para esta sesión
-                sess_score = sess.engagement_score()
-                sess_score_color = '#28a745' if sess_score >= 70 else '#ffc107' if sess_score >= 40 else '#dc3545'
-                
-                # Asegurar valores para completitud
-                scroll_depth = sess.max_scroll_depth or 0
+                # Enlace al heatmap si existe
+                heatmap_link = ''
+                if sess.heatmap_data.exists():
+                    heatmap_url = reverse('admin:pdi_texts_studysession_heatmap', args=[sess.pk])
+                    heatmap_link = f'<a href="{heatmap_url}" style="text-decoration: none;" title="Ver Heatmap">🔥</a>'
                 
                 html += f"""
-                    <tr style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 8px;">{sess.started_at.strftime('%d/%m/%Y %H:%M')}</td>
-                        <td style="padding: 8px;">
-                            <b>{sess.duration_formatted()}</b> 
-                            <small class="text-muted">({int(sess.active_percentage())}% act)</small>
-                        </td>
-                        <td style="padding: 8px; text-align: center;">{sess.total_interactions}</td>
+                    <tr style="border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 8px;">{sess_date}</td>
+                        <td style="padding: 8px; text-align: center;">{sess_duration}</td>
+                        <td style="padding: 8px; text-align: center;">{sess_active}</td>
+                        <td style="padding: 8px; text-align: center;"><strong>{sess_interactions}</strong></td>
                         <td style="padding: 8px; text-align: center;">
                             <div style="background: #e9ecef; border-radius: 4px; height: 6px; width: 50px; display: inline-block; vertical-align: middle;">
                                 <div style="background: #28a745; height: 100%; border-radius: 4px; width: {scroll_depth}%;"></div>
@@ -1113,8 +1048,8 @@ class StudySessionAdmin(admin.ModelAdmin):
             icon = '❌'
         
         return format_html(
-            '<span class="badge badge-{}" style="font-size: 14px;">{} {}</span>',
-            color, icon, round(score, 1)
+            '{} <span class="badge badge-{}">{:.1f}</span>',
+            icon, color, score
         )
     engagement_badge.short_description = 'Engagement'
     
@@ -1126,92 +1061,102 @@ class StudySessionAdmin(admin.ModelAdmin):
     interactions_badge.short_description = 'Interacciones'
     
     def completion_badge(self, obj):
-        if obj.completed:
-            return format_html('<span class="badge badge-success">✓ Completó</span>')
+        scroll_depth = obj.max_scroll_depth or 0
+        
+        if scroll_depth >= 90:
+            icon = '✅'
+            color = 'success'
+        elif scroll_depth >= 70:
+            icon = '🟡'
+            color = 'warning'
         else:
-            return format_html(
-                '<span class="badge badge-secondary">{:.0f}% leído</span>',
-                obj.max_scroll_depth
-            )
-    completion_badge.short_description = 'Completitud'
+            icon = '🔴'
+            color = 'danger'
+        
+        return format_html(
+            '{} <span class="badge badge-{}">{:.0f}%</span>',
+            icon, color, scroll_depth
+        )
+    completion_badge.short_description = 'Completado'
     
     def actions_column(self, obj):
-        heatmap_url = reverse('admin:pdi_texts_studysession_heatmap', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="btn btn-sm btn-info" target="_blank">'
-            '<i class="fas fa-fire"></i> Ver Heatmap</a>',
-            heatmap_url
-        )
+        """Botones de acción"""
+        buttons = []
+        
+        # Botón para ver heatmap (si existe)
+        if obj.heatmap_data.exists():
+            heatmap_url = reverse('admin:pdi_texts_studysession_heatmap', args=[obj.pk])
+            buttons.append(
+                f'<a href="{heatmap_url}" class="btn btn-sm btn-danger" target="_blank" title="Ver Heatmap">'
+                '🔥 Heatmap</a>'
+            )
+        
+        return format_html(' '.join(buttons) if buttons else '—')
     actions_column.short_description = 'Acciones'
     
     # ============================================
-    # CAMPOS READONLY CON VISUALIZACIONES
+    # READONLY FIELDS DETALLADOS
     # ============================================
     
     def engagement_score_display(self, obj):
         score = obj.engagement_score()
         
-        # Crear barra de progreso
-        color = 'success' if score >= 70 else 'warning' if score >= 50 else 'danger'
-        
-        # FIX: Convertir el número a string antes para evitar el error de format code
-        score_str = f"{score:.1f}"
+        if score >= 80:
+            color = '#28a745'
+            label = 'Excelente'
+            icon = '🔥'
+        elif score >= 60:
+            color = '#17a2b8'
+            label = 'Bueno'
+            icon = '✅'
+        elif score >= 40:
+            color = '#ffc107'
+            label = 'Regular'
+            icon = '⚠️'
+        else:
+            color = '#dc3545'
+            label = 'Bajo'
+            icon = '❌'
         
         return format_html(
-            '''
-            <div class="progress" style="height: 25px;">
-                <div class="progress-bar bg-{}" role="progressbar" 
-                     style="width: {}%;" aria-valuenow="{}" 
-                     aria-valuemin="0" aria-valuemax="100">
-                    <strong>{}%</strong>
-                </div>
-            </div>
-            <small class="text-muted">
-                Basado en tiempo activo, interacciones, scroll depth y completitud
-            </small>
-            ''',
-            color, score, score, score_str
+            '<div style="text-align: center; padding: 15px; background: {}20; border-radius: 8px;">'
+            '<div style="font-size: 3em;">{}</div>'
+            '<div style="font-size: 2em; font-weight: bold; color: {};">{:.1f}</div>'
+            '<div style="color: #666;">{}</div>'
+            '</div>',
+            color, icon, color, score, label
         )
     engagement_score_display.short_description = 'Score de Engagement'
     
     def activity_chart(self, obj):
-        """Gráfico de actividad a lo largo de la sesión"""
-        events = obj.events.all().order_by('timestamp')
+        """Gráfico simple de actividad"""
+        html = '''
+        <div class="card">
+            <div class="card-body">
+                <h5>Distribución de Tiempo</h5>
+                <div class="progress" style="height: 30px;">
+        '''
         
-        if not events:
-            return format_html('<p class="text-muted">No hay eventos registrados</p>')
+        total_time = obj.total_time_seconds if obj.total_time_seconds > 0 else 1
+        active_pct = (obj.active_time_seconds / total_time) * 100
+        idle_pct = (obj.idle_time_seconds / total_time) * 100
         
-        # Agrupar eventos por minuto
-        event_counts_by_minute = {}
-        for event in events:
-            minute = int(event.time_since_session_start // 60)
-            event_counts_by_minute[minute] = event_counts_by_minute.get(minute, 0) + 1
+        html += f'''
+                    <div class="progress-bar bg-success" role="progressbar" style="width: {active_pct}%" title="Activo: {obj.active_time_seconds}s">
+                        Activo {active_pct:.1f}%
+                    </div>
+                    <div class="progress-bar bg-warning" role="progressbar" style="width: {idle_pct}%" title="Inactivo: {obj.idle_time_seconds}s">
+                        Inactivo {idle_pct:.1f}%
+                    </div>
+        '''
         
-        # Crear HTML para el gráfico simple
-        max_events = max(event_counts_by_minute.values()) if event_counts_by_minute else 1
+        html += '''
+                </div>
+            </div>
+        </div>
+        '''
         
-        chart_html = '<div style="display: flex; align-items: flex-end; height: 200px; gap: 2px;">'
-        
-        for minute in range(max(event_counts_by_minute.keys()) + 1):
-            count = event_counts_by_minute.get(minute, 0)
-            height = (count / max_events) * 180
-            
-            color = '#28a745' if count > max_events * 0.7 else '#ffc107' if count > max_events * 0.4 else '#dc3545'
-            
-            chart_html += f'''
-                <div style="
-                    width: 10px;
-                    height: {height}px;
-                    background-color: {color};
-                    border-radius: 2px;
-                    position: relative;
-                " title="Minuto {minute}: {count} eventos"></div>
-            '''
-        
-        chart_html += '</div>'
-        chart_html += '<p class="text-muted mt-2"><small>Eventos por minuto durante la sesión</small></p>'
-        
-        return format_html(chart_html)
+        return format_html(html)
     activity_chart.short_description = 'Gráfico de Actividad'
     
     def sections_breakdown(self, obj):
@@ -1223,8 +1168,11 @@ class StudySessionAdmin(admin.ModelAdmin):
         
         total_time = sum(s.total_time_seconds for s in sections)
         
-        html = '<table class="table table-sm table-striped">'
-        html += '''
+        html = '''
+        <div class="card">
+            <div class="card-body">
+                <h5>Top 10 Secciones Más Visitadas</h5>
+                <table class="table table-sm">
             <thead>
                 <tr>
                     <th>Sección</th>
@@ -1291,38 +1239,60 @@ class StudySessionAdmin(admin.ModelAdmin):
         '''
         
         return format_html(html)
-    heatmap_preview.short_description = 'Heatmap'
+    heatmap_preview.short_description = 'Preview Heatmap'
     
     def event_timeline(self, obj):
-        """Timeline de eventos importantes"""
-        events = obj.events.filter(
-            event_type__in=['flashcard_flip', 'node_expand', 'copy_text', 'tab_hidden', 'tab_visible']
-        ).order_by('timestamp')[:50]
+        """Timeline de eventos"""
+        events = obj.events.all().order_by('timestamp')[:50]  # Primeros 50
         
         if not events:
-            return format_html('<p class="text-muted">No hay eventos destacados</p>')
+            return format_html('<p class="text-muted">No hay eventos registrados</p>')
         
-        html = '<div class="timeline" style="max-height: 400px; overflow-y: auto;">'
+        html = '''
+        <div class="card">
+            <div class="card-body">
+                <h5>Timeline de Eventos (Primeros 50)</h5>
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Tiempo</th>
+                                <th>Tipo</th>
+                                <th>Elemento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        '''
+        
+        event_icons = {
+            'click': '🖱️',
+            'scroll': '📜',
+            'hover': '👆',
+            'flashcard_flip': '🔄',
+            'node_expand': '➕',
+            'node_collapse': '➖'
+        }
         
         for event in events:
-            icon = {
-                'flashcard_flip': '📇',
-                'node_expand': '🌳',
-                'copy_text': '📋',
-                'tab_hidden': '👁️',
-                'tab_visible': '👀'
-            }.get(event.event_type, '•')
+            icon = event_icons.get(event.event_type, '•')
+            time_display = f"{event.time_since_session_start:.1f}s"
+            element_text = event.element_text[:50] if event.element_text else '—'
             
             html += f'''
-                <div class="mb-2 p-2" style="border-left: 3px solid #007bff;">
-                    <strong>{icon} {event.get_event_type_display()}</strong>
-                    <span class="text-muted"> @ {event.time_since_session_start:.0f}s</span>
-                    <br>
-                    <small>{event.element_text[:100] if event.element_text else ''}</small>
-                </div>
+                <tr>
+                    <td><code>{time_display}</code></td>
+                    <td>{icon} {event.event_type}</td>
+                    <td><small>{element_text}</small></td>
+                </tr>
             '''
         
-        html += '</div>'
+        html += '''
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        '''
         
         return format_html(html)
     event_timeline.short_description = 'Timeline de Eventos'
@@ -1332,50 +1302,22 @@ class StudySessionAdmin(admin.ModelAdmin):
     # ============================================
     
     def analytics_dashboard_view(self, request):
-        """Dashboard general de analytics"""
+        """Vista de dashboard general de analytics"""
         
-        # Filtros de tiempo
-        today = timezone.now().date()
-        week_ago = today - timedelta(days=7)
-        month_ago = today - timedelta(days=30)
-        
-        # Sesiones totales
+        # Estadísticas generales
         total_sessions = StudySession.objects.filter(is_active=False).count()
-        sessions_this_week = StudySession.objects.filter(
-            started_at__gte=week_ago,
-            is_active=False
-        ).count()
+        total_users = StudySession.objects.values('user').distinct().count()
         
-        # Tiempo total de estudio
-        total_study_time = StudySession.objects.filter(
-            is_active=False
-        ).aggregate(total=Sum('total_time_seconds'))['total'] or 0
+        avg_duration = StudySession.objects.filter(is_active=False).aggregate(
+            avg=Avg('total_time_seconds')
+        )['avg'] or 0
         
-        # Promedio de engagement
-        avg_engagement = StudySession.objects.filter(
-            is_active=False,
-            total_time_seconds__gt=0
-        ).aggregate(
+        avg_engagement = StudySession.objects.filter(is_active=False).aggregate(
             avg=Avg(F('active_time_seconds') * 100.0 / F('total_time_seconds'))
         )['avg'] or 0
         
-        # Top usuarios más activos
-        top_users = StudySession.objects.filter(
-            is_active=False
-        ).values(
-            'user__email',
-            'user__first_name',
-            'user__last_name'
-        ).annotate(
-            total_sessions=Count('id'),
-            total_time=Sum('total_time_seconds'),
-            avg_engagement=Avg(F('active_time_seconds') * 100.0 / F('total_time_seconds'))
-        ).order_by('-total_time')[:10]
-        
-        # Materiales más estudiados
-        top_materials = StudySession.objects.filter(
-            is_active=False
-        ).values(
+        # Top materiales
+        top_materials = StudySession.objects.filter(is_active=False).values(
             'material__text__title',
             'material__material_type'
         ).annotate(
@@ -1384,28 +1326,47 @@ class StudySessionAdmin(admin.ModelAdmin):
         ).order_by('-total_sessions')[:10]
         
         context = {
-            **self.admin_site.each_context(request),
             'title': 'Analytics Dashboard',
             'total_sessions': total_sessions,
-            'sessions_this_week': sessions_this_week,
-            'total_study_time_hours': round(total_study_time / 3600, 2),
+            'total_users': total_users,
+            'avg_duration': round(avg_duration, 2),
             'avg_engagement': round(avg_engagement, 2),
-            'top_users': top_users,
-            'top_materials': top_materials
+            'top_materials': top_materials,
+            'opts': self.model._meta,
         }
         
         return render(request, 'admin/tracking/analytics_dashboard.html', context)
     
     def heatmap_view(self, request, session_id):
-        """Vista del heatmap interactivo"""
-        session = StudySession.objects.get(pk=session_id)
+        """Vista personalizada para visualizar el heatmap"""
+        session = get_object_or_404(StudySession, pk=session_id)
         heatmap = session.heatmap_data.first()
         
+        # ✅ CORRECCIÓN PROBLEMA 4: Serializar correctamente los datos JSON
+        import json
+        
+        if heatmap:
+            # Convertir a JSON seguro para JavaScript
+            heatmap_data = {
+                'clicks': json.dumps(heatmap.clicks if heatmap.clicks else []),
+                'mouse_movements': json.dumps(heatmap.mouse_movements if heatmap.mouse_movements else []),
+                'scroll_points': json.dumps(heatmap.scroll_points if heatmap.scroll_points else []),
+                'hot_zones': json.dumps(heatmap.hot_zones if heatmap.hot_zones else [])
+            }
+        else:
+            heatmap_data = {
+                'clicks': '[]',
+                'mouse_movements': '[]',
+                'scroll_points': '[]',
+                'hot_zones': '[]'
+            }
+        
         context = {
-            **self.admin_site.each_context(request),
-            'title': f'Heatmap - Sesión {str(session.session_id)[:8]}',
             'session': session,
-            'heatmap': heatmap
+            'heatmap': heatmap,
+            'heatmap_data': heatmap_data,  # ← Usar este dict en lugar de heatmap directo
+            'opts': self.model._meta,
+            'has_view_permission': self.has_view_permission(request, session)
         }
         
         return render(request, 'admin/tracking/heatmap_view.html', context)
@@ -1446,8 +1407,8 @@ class InteractionEventAdmin(admin.ModelAdmin):
     
     def element_preview(self, obj):
         if obj.element_text:
-            return obj.element_text[:50] + '...' if len(obj.element_text) > 50 else obj.element_text
-        return '-'
+            return obj.element_text[:50]
+        return '—'
     element_preview.short_description = 'Elemento'
 
 
@@ -1460,16 +1421,34 @@ class SectionTimeTrackingAdmin(admin.ModelAdmin):
         return {}
 
     list_display = [
-        'section_id',
-        'section_type',
+        'section_id_short',
+        'section_type_badge',
         'session_link',
         'time_display',
-        'view_count',
-        'fully_read_badge'
+        'view_count_badge'
     ]
     
-    list_filter = ['section_type', 'fully_read']
-    search_fields = ['section_id', 'section_content_preview']
+    list_filter = ['section_type', 'first_view_at']
+    search_fields = ['section_id', 'session__session_id']
+    readonly_fields = ['session', 'section_id', 'first_view_at', 'last_view_at']
+    
+    def section_id_short(self, obj):
+        return obj.section_id[:30]
+    section_id_short.short_description = 'Sección'
+    
+    def section_type_badge(self, obj):
+        colors = {
+            'weak_section': 'danger',
+            'review_section': 'success',
+            'flashcard': 'info',
+            'tree_node': 'warning'
+        }
+        color = colors.get(obj.section_type, 'secondary')
+        return format_html(
+            '<span class="badge badge-{}">{}</span>',
+            color, obj.get_section_type_display()
+        )
+    section_type_badge.short_description = 'Tipo'
     
     def session_link(self, obj):
         url = reverse('admin:pdi_texts_studysession_change', args=[obj.session.pk])
@@ -1481,13 +1460,14 @@ class SectionTimeTrackingAdmin(admin.ModelAdmin):
     
     def time_display(self, obj):
         return f"{obj.total_time_seconds:.1f}s"
-    time_display.short_description = 'Tiempo'
+    time_display.short_description = 'Tiempo Total'
     
-    def fully_read_badge(self, obj):
-        if obj.fully_read:
-            return format_html('<span class="badge badge-success">✓</span>')
-        return format_html('<span class="badge badge-secondary">-</span>')
-    fully_read_badge.short_description = 'Leído'
+    def view_count_badge(self, obj):
+        return format_html(
+            '<span class="badge badge-primary">{}</span>',
+            obj.view_count
+        )
+    view_count_badge.short_description = 'Vistas'
 
 
 @admin.register(HeatmapData)
@@ -1500,13 +1480,15 @@ class HeatmapDataAdmin(admin.ModelAdmin):
 
     list_display = [
         'session_link',
-        'data_points_badge',
         'clicks_count',
+        'movements_count',
         'hot_zones_count',
         'captured_at'
     ]
     
-    readonly_fields = ['session', 'clicks', 'mouse_movements', 'scroll_points', 'hot_zones']
+    list_filter = ['captured_at']
+    search_fields = ['session__session_id']
+    readonly_fields = ['session', 'clicks', 'mouse_movements', 'scroll_points', 'hot_zones', 'captured_at']
     
     def session_link(self, obj):
         url = reverse('admin:pdi_texts_studysession_change', args=[obj.session.pk])
@@ -1517,17 +1499,71 @@ class HeatmapDataAdmin(admin.ModelAdmin):
         )
     session_link.short_description = 'Sesión'
     
-    def data_points_badge(self, obj):
-        return format_html(
-            '<span class="badge badge-info">{}</span>',
-            obj.data_points_count
-        )
-    data_points_badge.short_description = 'Puntos de Datos'
-    
     def clicks_count(self, obj):
-        return len(obj.clicks)
+        return format_html(
+            '<span class="badge badge-danger">{}</span>',
+            len(obj.clicks)
+        )
     clicks_count.short_description = 'Clics'
     
+    def movements_count(self, obj):
+        return format_html(
+            '<span class="badge badge-info">{}</span>',
+            len(obj.mouse_movements)
+        )
+    movements_count.short_description = 'Movimientos'
+    
     def hot_zones_count(self, obj):
-        return len(obj.hot_zones)
+        return format_html(
+            '<span class="badge badge-warning">{}</span>',
+            len(obj.hot_zones)
+        )
     hot_zones_count.short_description = 'Zonas Calientes'
+
+
+@admin.register(MaterialRequest)
+class MaterialRequestAdmin(admin.ModelAdmin):
+    list_display = ['user_email', 'text_title', 'material_type_badge', 'requested_at']
+    list_filter = ['material_type', 'requested_at']
+    search_fields = ['user__email', 'text__title']
+    readonly_fields = ['user', 'text', 'attempt', 'requested_at']
+    
+    def user_email(self, obj):
+        return obj.user.email
+    user_email.short_description = 'Usuario'
+    
+    def text_title(self, obj):
+        return obj.text.title
+    text_title.short_description = 'Texto'
+    
+    def material_type_badge(self, obj):
+        return format_html(
+            '<span class="badge badge-info">{}</span>',
+            obj.get_material_type_display()
+        )
+    material_type_badge.short_description = 'Tipo'
+
+
+@admin.register(MaterialEffectiveness)
+class MaterialEffectivenessAdmin(admin.ModelAdmin):
+    list_display = ['user_email', 'material_type_badge', 'was_effective_icon', 'created_at']
+    list_filter = ['material_type', 'was_effective', 'created_at']
+    search_fields = ['user__email']
+    readonly_fields = ['user', 'material', 'created_at']
+    
+    def user_email(self, obj):
+        return obj.user.email
+    user_email.short_description = 'Usuario'
+    
+    def material_type_badge(self, obj):
+        return format_html(
+            '<span class="badge badge-info">{}</span>',
+            obj.get_material_type_display()
+        )
+    material_type_badge.short_description = 'Tipo'
+    
+    def was_effective_icon(self, obj):
+        if obj.was_effective:
+            return format_html('<span style="font-size: 20px;">✅</span>')
+        return format_html('<span style="font-size: 20px;">❌</span>')
+    was_effective_icon.short_description = 'Efectivo'

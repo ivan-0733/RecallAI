@@ -510,7 +510,12 @@ class StudyTracker {
                 mouse_movements: this.heatmapData.mouseMovements.slice(-500), // Últimos 500
                 scroll_points: [...this.heatmapData.scrollPoints]
             },
-            metrics: this.getMetricsSummary()
+            metrics: {
+                ...this.getMetricsSummary(),
+                // ✅ CORRECCIÓN PROBLEMA 1: Enviar tiempos en cada sync DENTRO de metrics
+                total_time_seconds: Math.floor(this.getSessionDuration() / 1000),
+                active_time_seconds: Math.floor(this.calculateActiveTime() / 1000)
+            }
         };
         
         try {

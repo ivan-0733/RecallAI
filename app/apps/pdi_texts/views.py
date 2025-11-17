@@ -7,6 +7,8 @@ from django.db.models import Count, Avg
 from collections import Counter
 from django.utils import timezone
 from datetime import timedelta
+from bs4 import BeautifulSoup  # Si no está ya importada
+import re  # Si no está ya importada
 
 from apps.pdi_texts.recommendation import get_recommended_material
 from apps.pdi_texts.tasks_material import generate_didactic_material
@@ -703,6 +705,12 @@ class TrackingViewSet(viewsets.ViewSet):
                 session.focus_changes = metrics.get('focus_changes', 0)
                 session.sections_visited = metrics.get('sections_visited', [])
                 session.max_scroll_depth = metrics.get('max_scroll_depth', 0)
+                
+                # ✅ CORRECCIÓN PROBLEMA 1: Actualizar tiempos en tiempo real
+                session.total_time_seconds = metrics.get('total_time_seconds', 0)
+                session.active_time_seconds = metrics.get('active_time_seconds', 0)
+                session.idle_time_seconds = session.total_time_seconds - session.active_time_seconds
+                
                 session.save()
             
             return Response({
@@ -761,11 +769,55 @@ class TrackingViewSet(viewsets.ViewSet):
             material.total_interactions += session.total_interactions
             material.sessions_count += 1
             material.last_studied_at = timezone.now()
-            material.completion_percentage = session.max_scroll_depth
-            
+
+            # ✅ CORRECCIÓN PROBLEMA 2 y 3: Calcular completion_percentage según tipo de material
+            if material.material_type == 'flashcard':
+                # Para flashcards: contar cuántas se voltearon
+                flashcard_flip_count = session.events.filter(event_type='flashcard_flip').count()
+                total_flashcards = 20  # Siempre son 20 flashcards
+                material.completion_percentage = min(100, (flashcard_flip_count / total_flashcards) * 100)
+                session.completed = flashcard_flip_count >= total_flashcards
+                
+            elif material.material_type in ['decision_tree', 'mind_map']:
+                # Para árboles/mapas: contar cuántos nodos se expandieron
+                node_expand_count = session.events.filter(event_type='node_expand').count()
+                
+                # Extraer el número total de nodos del HTML (buscar atributos data-node)
+                import re
+                from bs4 import BeautifulSoup
+                
+                try:
+                    soup = BeautifulSoup(material.html_content, 'html.parser')
+                    # Buscar todos los elementos con data-node o clase 'node'
+                    total_nodes = len(soup.find_all(attrs={'data-node': True}))
+                    if total_nodes == 0:
+                        total_nodes = len(soup.find_all(class_='node'))
+                    
+                    if total_nodes > 0:
+                        material.completion_percentage = min(100, (node_expand_count / total_nodes) * 100)
+                        session.completed = node_expand_count >= total_nodes
+                    else:
+                        # Fallback si no se puede determinar
+                        material.completion_percentage = session.max_scroll_depth
+                        session.completed = session.max_scroll_depth >= 90
+                except Exception as e:
+                    # Si falla el parsing, usar scroll depth como fallback
+                    material.completion_percentage = session.max_scroll_depth
+                    session.completed = session.max_scroll_depth >= 90
+                    
+            elif material.material_type == 'summary':
+                # Para resúmenes: usar scroll depth (ya funciona bien)
+                material.completion_percentage = session.max_scroll_depth
+                session.completed = session.max_scroll_depth >= 90
+            else:
+                # Por defecto: usar scroll depth
+                material.completion_percentage = session.max_scroll_depth
+                session.completed = session.max_scroll_depth >= 90
+
             # Calcular engagement score
             material.engagement_score = session.engagement_score()
             material.save()
+            session.save()  # Guardar session.completed
             
             return Response({
                 'status': 'success',

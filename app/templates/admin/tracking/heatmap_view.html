@@ -217,10 +217,16 @@
 {{ block.super }}
 <script>
 (function() {
-    // Datos del heatmap desde Django
-    const clicks = {{ heatmap.clicks|safe }};
-    const mouseMovements = {{ heatmap.mouse_movements|safe }};
-    const hotZones = {{ heatmap.hot_zones|safe }};
+    // ✅ CORRECCIÓN PROBLEMA 4: Parsear JSON correctamente
+    const clicks = JSON.parse('{{ heatmap_data.clicks|escapejs }}');
+    const mouseMovements = JSON.parse('{{ heatmap_data.mouse_movements|escapejs }}');
+    const hotZones = JSON.parse('{{ heatmap_data.hot_zones|escapejs }}');
+
+    console.log('📍 Datos de heatmap cargados:', {
+        clicks: clicks.length,
+        mouseMovements: mouseMovements.length,
+        hotZones: hotZones.length
+    });
     
     const canvas = document.getElementById('heatmapCanvas');
     const ctx = canvas.getContext('2d');

@@ -25,3 +25,5 @@ langchain==0.2.7
 langchain-google-genai==1.0.10
 
 bleach==6.1.0
+
+beautifulsoup4==4.12.3
