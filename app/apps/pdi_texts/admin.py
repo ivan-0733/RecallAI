@@ -305,11 +305,11 @@ class InitialQuizAdmin(admin.ModelAdmin):
     ]
     
     list_filter = ['text__topic', 'text__difficulty', 'created_at']
-    search_fields = ['text__title', 'questions']
+    search_fields = ['text__title', 'questions_json']
     
     readonly_fields = [
         'text',
-        'questions',
+        'questions_json',
         'created_at',
         'questions_preview',
         'validation_result'
@@ -320,7 +320,7 @@ class InitialQuizAdmin(admin.ModelAdmin):
             'fields': ('text', 'created_at')
         }),
         ('❓ Preguntas', {
-            'fields': ('questions', 'questions_preview', 'validation_result'),
+            'fields': ('questions_json', 'questions_preview', 'validation_result'),
             'description': 'Las preguntas están en formato JSON. Usa el botón de preview para visualizarlas mejor.'
         }),
     )
@@ -332,7 +332,7 @@ class InitialQuizAdmin(admin.ModelAdmin):
     def questions_count(self, obj):
         """Contador de preguntas"""
         try:
-            count = len(obj.questions.get('questions', []))
+            count = len(obj.questions_json.get('questions', []))
             return format_html(
                 '<span class="badge badge-primary">{} preguntas</span>',
                 count
@@ -348,7 +348,7 @@ class InitialQuizAdmin(admin.ModelAdmin):
     def questions_preview(self, obj):
         """Vista previa de las preguntas en formato HTML"""
         try:
-            questions = obj.questions.get('questions', [])
+            questions = obj.questions_json.get('questions', [])
             
             if not questions:
                 return format_html('<p class="text-muted">No hay preguntas disponibles</p>')
@@ -531,7 +531,12 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
         'associated_quiz_link_detailed', # <--- Enlace detallado
         'user',
         'text',
-        'attempt'
+        'attempt',
+        # AGREGA ESTOS CAMPOS AQUÍ:
+        'requested_at',
+        'generated_at',
+        'generation_time_seconds',
+        'was_effective'
     ]
     
     fieldsets = (
@@ -595,48 +600,51 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
     text_link.short_description = 'Texto'
 
     def stats_summary_columns(self, obj):
-        """
-        Muestra las stats acumuladas en formato compacto de columnas.
-        """
-        stats = obj.get_aggregated_stats()
-        
-        # Formatear tiempos
-        def format_time(seconds):
-            mins = seconds // 60
-            secs = seconds % 60
-            return f"{mins}m {secs}s"
-        
-        total_time_fmt = format_time(stats['total_time'])
-        active_time_fmt = format_time(stats['active_time'])
-        
-        # Colores para completion
-        completion_color = 'green' if stats['avg_completion'] > 70 else 'orange'
-        
-        html = f"""
-        <div style="display: flex; gap: 15px; align-items: center;">
-            <div style="text-align: center;">
-                <div style="font-size: 0.75em; color: #666;">Sesiones</div>
-                <div style="font-weight: bold; font-size: 1.1em;">{stats['total_sessions']}</div>
+            """
+            Muestra las stats acumuladas en formato compacto de columnas.
+            """
+            stats = obj.get_aggregated_stats()
+            
+            # Formatear tiempos
+            def format_time(seconds):
+                mins = seconds // 60
+                secs = seconds % 60
+                return f"{mins}m {secs}s"
+            
+            # CORRECCIÓN 1: Usar 'total_active' en lugar de 'active_time'
+            total_time_fmt = format_time(stats['total_time'])
+            active_time_fmt = format_time(stats['total_active']) 
+            
+            # Colores para completion
+            completion_color = 'green' if stats['avg_completion'] > 70 else 'orange'
+            
+            # CORRECCIÓN 2: Usar 'sessions_count' en lugar de 'total_sessions' dentro del HTML
+            html = f"""
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75em; color: #666;">Sesiones</div>
+                    <div style="font-weight: bold; font-size: 1.1em;">{stats['sessions_count']}</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75em; color: #666;">Tiempo Total</div>
+                    <div style="font-weight: bold; font-size: 1.1em;">{total_time_fmt}</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75em; color: #666;">Tiempo Activo</div>
+                    <div style="font-weight: bold; font-size: 1.1em;">{active_time_fmt}</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75em; color: #666;">Interacciones</div>
+                    <div style="font-weight: bold; font-size: 1.1em;">{stats['total_interactions']}</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75em; color: #666;">Completado</div>
+                    <div style="font-weight: bold; font-size: 1.1em; color: {completion_color};">{stats['avg_completion']:.0f}%</div>
+                </div>
             </div>
-            <div style="text-align: center;">
-                <div style="font-size: 0.75em; color: #666;">Tiempo Total</div>
-                <div style="font-weight: bold; font-size: 1.1em;">{total_time_fmt}</div>
-            </div>
-            <div style="text-align: center;">
-                <div style="font-size: 0.75em; color: #666;">Tiempo Activo</div>
-                <div style="font-weight: bold; font-size: 1.1em;">{active_time_fmt}</div>
-            </div>
-            <div style="text-align: center;">
-                <div style="font-size: 0.75em; color: #666;">Interacciones</div>
-                <div style="font-weight: bold; font-size: 1.1em;">{stats['total_interactions']}</div>
-            </div>
-            <div style="text-align: center;">
-                <div style="font-size: 0.75em; color: #666;">Completado</div>
-                <div style="font-weight: bold; font-size: 1.1em; color: {completion_color};">{stats['avg_completion']:.0f}%</div>
-            </div>
-        </div>
-        """
-        return format_html(html)
+            """
+            return format_html(html)
+    
     stats_summary_columns.short_description = 'Estadísticas Acumuladas'
 
     def created_at_formatted(self, obj):
@@ -1546,10 +1554,16 @@ class MaterialRequestAdmin(admin.ModelAdmin):
 
 @admin.register(MaterialEffectiveness)
 class MaterialEffectivenessAdmin(admin.ModelAdmin):
-    list_display = ['user_email', 'material_type_badge', 'was_effective_icon', 'created_at']
-    list_filter = ['material_type', 'was_effective', 'created_at']
+    # CORRECCIÓN 1: Eliminar campos que no existen y usar 'improvement' (mejora)
+    list_display = ['user_email', 'material_type_badge', 'improvement', 'created_at']
+    
+    # CORRECCIÓN 2: Eliminar 'was_effective' del filtro (no existe en este modelo)
+    list_filter = ['material_type', 'created_at']
+    
     search_fields = ['user__email']
-    readonly_fields = ['user', 'material', 'created_at']
+    
+    # CORRECCIÓN 3: Cambiar 'material' por 'text' (que es el campo real)
+    readonly_fields = ['user', 'text', 'created_at', 'improvement', 'time_spent_minutes']
     
     def user_email(self, obj):
         return obj.user.email
