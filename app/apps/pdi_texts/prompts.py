@@ -242,16 +242,18 @@ def get_decision_tree_prompt(text_title, text_topic, weak_topics, review_topics,
     
     if tiene_temas_debiles:
         # --- INICIO DE LA MODIFICACIÓN (YA APLICADA) ---
+        # (MODIFICADO) Se elimina la regla 75/25 y se prioriza la profundidad equitativa
         enfoque_texto = f"""
-ENFOQUE ADAPTATIVO (REGLA 75/25):
-- **75% del árbol (FOCO DÉBIL)**: Enfócate en los temas débiles del estudiante: {weak_topics_str}
-  → Crea más nodos, subtemas y detalles sobre estos conceptos.
-  → Profundiza en ejemplos, casos de uso y explicaciones detalladas (Nivel 2 y Nivel 3).
+ENFOQUE ESTRUCTURAL (¡MODIFICADO!):
+- **FOCO DÉBIL (Ramas Rojas)**: Enfócate en los temas débiles del estudiante: {weak_topics_str}
+  → Crea ramas principales y detalladas (Nivel 2 y Nivel 3) sobre estos conceptos.
   
-- **25% del árbol (FOCO REPASO)**: Incluye temas de repaso general: {review_topics_str}
-  → **¡NUEVA INSTRUCCIÓN!** Estos temas también deben ser detallados.
-  → Desarrolla estos temas con subtemas y detalles (Nivel 2 y Nivel 3) para reforzar el conocimiento.
-  → Asegúrate de que incluyan explicaciones y ejemplos clave.
+- **FOCO REPASO (Ramas Verdes)**: Incluye temas de repaso general: {review_topics_str}
+  → Crea ramas principales y detalladas (Nivel 2 y Nivel 3) sobre estos conceptos.
+
+INSTRUCCIÓN DE PROFUNDIDAD (¡MUY IMPORTANTE!):
+- Todas las ramas (tanto las de temas débiles como las de repaso) DEBEN tener una profundidad similar y estar igualmente detalladas.
+- El objetivo es que TODAS las ramas lleguen al Nivel 3 con ejemplos, explicaciones o detalles concretos, sin importar si son de repaso o de tema débil.
 """
         # --- FIN DE LA MODIFICACIÓN ---
     else:
@@ -326,14 +328,13 @@ REGLAS CRÍTICAS:
 
 5. **Marcado de temas débiles:** Si el nodo trata un tema débil ({weak_topics_str}), agrega `"es_tema_debil": true`
 
-6. **Proporción 75/25:** - Si hay temas débiles, el 75% de los nodos (especialmente nivel 2 y 3) deben ser sobre {weak_topics_str}
-   - Solo el 25% debe ser repaso ({review_topics_str})
+6. **(MODIFICADO) Estructura de Ramas:** Ya NO se usa la proporción 75/25. La estructura debe basarse en los temas. Si hay 2 temas débiles y 1 de repaso, el Nivel 1 puede tener 3 nodos (2 rojos, 1 verde). La clave es que todas esas ramas deben desarrollarse en profundidad por igual.
 
 7. **Cada nodo hijo debe tener exactamente 1 padre**
 
-8. **Profundidad:**
-   - **Tanto los temas débiles como los temas de repaso** deben desarrollarse con detalle.
-   - Intenta que la mayoría de las ramas (débiles y de repaso) lleguen hasta **Nivel 3** con ejemplos o detalles.
+8. **(MODIFICADO) Profundidad (¡REGLA CRÍTICA!):**
+   - **TODAS las ramas (débiles y de repaso)** DEBEN desarrollarse con el mismo nivel de detalle.
+   - NO crees ramas de repaso (verdes) superficiales. Deben llegar al **Nivel 3** con la misma calidad y detalle que las ramas de temas débiles (rojas).
 (--- FIN DE LA MODIFICACIÓN ---)
 
 

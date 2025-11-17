@@ -213,7 +213,7 @@
             border-width: 0.3em; 
         }
 
-        /* --- (ACTUALIZADO) ESTILOS PARA EL ÁRBOL D3 "HERMOSO" --- */
+        /* --- (ACTUALIZADO) ESTILOS PARA EL MAPA D3 "HERMOSO" --- */
         #arbol-container {
             /* Fondo blanco para el lienzo */
             background-color: #ffffff !important; 
@@ -419,7 +419,7 @@
             }
 
             // ============================================
-            // DETECCIÓN MEJORADA DE ÁRBOL DE DECISIÓN
+            // DETECCIÓN MEJORADA DE Mapa Conceptual
             // ============================================
             if (material.material_type === 'decision_tree') {
                 console.log('🌳 Tipo de material: decision_tree detectado');
@@ -455,14 +455,14 @@
                         console.log('✅ JSON parseado exitosamente (método limpieza)');
                         
                     } catch (e2) {
-                        console.error('❌ Error parseando árbol (ambos métodos):', e2);
+                        console.error('❌ Error parseando mapa (ambos métodos):', e2);
                         console.error('Contenido completo:', material.html_content);
                         
                         $('#loadingSpinner').hide();
                         $('#materialContent').html(`
                             <div class="alert alert-danger">
-                                <h4><i class="fas fa-exclamation-triangle"></i> Error al cargar el árbol de decisión</h4>
-                                <p>El formato del árbol no es válido. Por favor, intenta regenerar el material.</p>
+                                <h4><i class="fas fa-exclamation-triangle"></i> Error al cargar el Mapa Conceptual</h4>
+                                <p>El formato del mapa no es válido. Por favor, intenta regenerar el material.</p>
                                 <details style="margin-top: 15px;">
                                     <summary style="cursor: pointer; color: #0056b3; font-weight: 600;">Ver detalles técnicos</summary>
                                     <pre style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 11px; margin-top: 10px;">${material.html_content}</pre>
@@ -477,12 +477,12 @@
                 
                 // Validar estructura del JSON
                 if (!arbolData || !arbolData.datos || !arbolData.datos.nodos) {
-                    console.error('❌ Estructura de árbol inválida:', arbolData);
+                    console.error('❌ Estructura del mapa inválida:', arbolData);
                     $('#loadingSpinner').hide();
                     $('#materialContent').html(`
                         <div class="alert alert-warning">
-                            <h4><i class="fas fa-exclamation-circle"></i> Estructura de árbol incompleta</h4>
-                            <p>El árbol no tiene la estructura esperada. Faltan campos obligatorios.</p>
+                            <h4><i class="fas fa-exclamation-circle"></i> Estructura de mapa incompleta</h4>
+                            <p>El mapa no tiene la estructura esperada. Faltan campos obligatorios.</p>
                             <p><strong>Se esperaba:</strong> <code>{"datos": {"nodos": [...]}}</code></p>
                         </div>
                     `).fadeIn();
@@ -591,7 +591,7 @@
         }
 
         // ============================================
-        // === INICIO CÓDIGO D3 v8 (LAYOUT DE ÁRBOL "HERMOSO" CORREGIDO) ===
+        // === INICIO CÓDIGO D3 v8 (LAYOUT DE MAPA "HERMOSO" CORREGIDO) ===
         // ============================================
 
         // --- Variables globales para D3 Tree ---
@@ -601,7 +601,7 @@
         // --- (AJUSTABLE) Duración de la animación ---
         const transitionDuration = 400; // 400ms, más rápido
 
-        // --- (AJUSTABLE) Espaciado y tamaño del árbol ---
+        // --- (AJUSTABLE) Espaciado y tamaño del mapa ---
         const nodeWidth = 200;                  // Ancho fijo del rectángulo
         const nodeHeight = 60;                  // Alto fijo del rectángulo
         const nodeHorizontalSeparation = 260;   // Espacio horizontal ENTRE nodos (columna a columna)
@@ -614,7 +614,7 @@
             const container = $('#materialContent');
             
             if (!datos.datos || !datos.datos.nodos) {
-                container.html('<div class="alert alert-danger">Error: Estructura de árbol inválida</div>').fadeIn();
+                container.html('<div class="alert alert-danger">Error: Estructura del mapa inválida</div>').fadeIn();
                 return;
             }
 
@@ -627,7 +627,7 @@
             } catch (error) {
                 console.error("Error al estratificar los datos:", error);
                 console.error("Datos que fallaron:", datos.datos.nodos);
-                container.html('<div class="alert alert-danger">Error: Los datos del árbol tienen una jerarquía rota (ej. un hijo sin padre).</div>').fadeIn();
+                container.html('<div class="alert alert-danger">Error: Los datos del mapa tienen una jerarquía rota (ej. un hijo sin padre).</div>').fadeIn();
                 return;
             }
             
@@ -635,7 +635,7 @@
             const margin = { top: 20, right: 120, bottom: 20, left: 160 }; // Más margen izquierdo para el nodo raíz
             const height = 800; // Alto fijo del viewport
 
-            // 3. (CORREGIDO) Crear el layout de árbol de D3
+            // 3. (CORREGIDO) Crear el layout de mapa de D3
             treeLayout = d3.tree().nodeSize([nodeVerticalSeparation, nodeHorizontalSeparation]);
 
             // 4. Limpiar contenedor y añadir HTML del SVG
@@ -871,30 +871,36 @@
         // 5. (NUEVA PALETA "HERMOSA") Funciones de Estilo 
         function obtenerEstiloNodo(nivel, esTemaDebil) {
             
-            // Paleta "Hermosa": Nodos blancos, bordes de color Púrpura, Verde y Gris
+            // Paleta de colores por TIPO de nodo
             const paleta = {
-                0: { border: '#8E44AD', button: '#7D3C98' }, // Raíz (Púrpura)
-                1: { border: '#2ECC71', button: '#28B463' }, // Nivel 1 (Verde)
-                2: { border: '#2ECC71', button: '#28B463' }, // Nivel 2 (Verde)
-                3: { border: '#BDBDBD', button: '#9E9E9E' }  // Nivel 3 (Gris)
+                raiz:   { border: '#8E44AD', button: '#7D3C98' }, // Raíz (Púrpura)
+                debil:  { border: '#E74C3C', button: '#C0392B' }, // Tema Débil (Rojo)
+                fuerte: { border: '#2ECC71', button: '#28B463' }  // Tema Fuerte (Verde)
             };
             
-            const estiloBase = paleta[nivel] || paleta[3];
+            let estiloBase;
+
+            if (nivel === 0) {
+                // Nivel 0 siempre es la Raíz (Púrpura)
+                estiloBase = paleta.raiz;
+            } else if (esTemaDebil) {
+                // Si es tema débil (en cualquier nivel), es Rojo
+                estiloBase = paleta.debil;
+            } else {
+                // Si no es raíz y no es débil, ES FUERTE (Verde)
+                // Esto se aplicará a Nivel 1, 2, 3... etc. de temas fuertes.
+                estiloBase = paleta.fuerte;
+            }
             
             const estilo = {
                 background: '#FFFFFF',          // Fondo blanco para todos
-                border: estiloBase.border,      // Borde de color según nivel
+                border: estiloBase.border,      // Borde de color (corregido)
                 borderRadius: '16px',           // Esquinas redondeadas
                 buttonBackground: estiloBase.button,
                 buttonColor: 'white'
-                // El color del texto se maneja en el CSS (.arbol-texto-contenedor)
             };
 
-            // Override para temas débiles (rojo amigable)
-            if (esTemaDebil) {
-                estilo.border = '#E74C3C'; // Borde rojo suave
-                estilo.buttonBackground = '#C0392B';
-            }
+            // Ya no se necesita un "override" porque la lógica principal lo maneja
             
             return estilo;
         }

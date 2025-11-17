@@ -394,7 +394,7 @@ class MaterialEffectiveness(models.Model):
     
     MATERIAL_TYPES = [
         ('flashcard', 'Flashcards'),
-        ('decision_tree', 'Árbol de Decisión'),
+        ('decision_tree', 'Mapa Conceptual'),
         ('mind_map', 'Mapa Mental'),
         ('summary', 'Resumen Estructurado'),
     ]
@@ -471,7 +471,7 @@ class MaterialRequest(models.Model):
     
     MATERIAL_TYPES = [
         ('flashcard', 'Flashcards'),
-        ('decision_tree', 'Árbol de Decisión'),
+        ('decision_tree', 'Mapa Conceptual'),
         ('mind_map', 'Mapa Mental'),
         ('summary', 'Resumen Estructurado'),
     ]
@@ -540,7 +540,7 @@ class UserDidacticMaterial(models.Model):
     
     MATERIAL_TYPES = [
         ('flashcard', 'Flashcards'),
-        ('decision_tree', 'Árbol de Decisión'),
+        ('decision_tree', 'Mapa Conceptual'),
         ('mind_map', 'Mapa Mental'),
         ('summary', 'Resumen Estructurado'),
     ]
