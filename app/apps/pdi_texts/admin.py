@@ -691,9 +691,28 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
         avg_engagement = 0
         
         if total_sessions > 0:
-            total_depth = sum((s.max_scroll_depth or 0) for s in sessions)
-            avg_completion = total_depth / total_sessions
+        # ✅ CORRECCIÓN: Calcular completion REAL por sesión según tipo de material
+            total_completion = 0
+            for sess in sessions:
+                if obj.material_type == 'flashcard':
+                    flashcard_events = sess.events.filter(event_type='flashcard_flip')
+                    unique_flashcards = set()
+                    for event in flashcard_events:
+                        if event.element_id:
+                            unique_flashcards.add(event.element_id)
+                    session_completion = (len(unique_flashcards) / 20) * 100
+                elif obj.material_type in ['decision_tree', 'mind_map']:
+                    node_events = sess.events.filter(event_type='node_expand')
+                    unique_nodes = set()
+                    for event in node_events:
+                        if event.element_id:
+                            unique_nodes.add(event.element_id)
+                    session_completion = min(100, (len(unique_nodes) / 15) * 100)
+                else:
+                    session_completion = sess.max_scroll_depth or 0
+                total_completion += session_completion
             
+            avg_completion = total_completion / total_sessions
             total_engagement = sum(s.engagement_score() for s in sessions)
             avg_engagement = total_engagement / total_sessions
         
@@ -789,7 +808,25 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
                 sess_duration = f"{sess.total_time_seconds // 60}m {sess.total_time_seconds % 60}s"
                 sess_active = f"{sess.active_time_seconds // 60}m {sess.active_time_seconds % 60}s"
                 sess_interactions = sess.total_interactions
-                scroll_depth = sess.max_scroll_depth or 0
+                
+                # ✅ CORRECCIÓN: Calcular completion real
+                if obj.material_type == 'flashcard':
+                    flashcard_events = sess.events.filter(event_type='flashcard_flip')
+                    unique_flashcards = set()
+                    for event in flashcard_events:
+                        if event.element_id:
+                            unique_flashcards.add(event.element_id)
+                    scroll_depth = (len(unique_flashcards) / 20) * 100
+                elif obj.material_type in ['decision_tree', 'mind_map']:
+                    node_events = sess.events.filter(event_type='node_expand')
+                    unique_nodes = set()
+                    for event in node_events:
+                        if event.element_id:
+                            unique_nodes.add(event.element_id)
+                    scroll_depth = min(100, (len(unique_nodes) / 15) * 100)
+                else:
+                    scroll_depth = sess.max_scroll_depth or 0
+                
                 sess_score = sess.engagement_score()
                 sess_score_color = '#28a745' if sess_score > 70 else '#ffc107' if sess_score > 40 else '#dc3545'
                 
@@ -1069,23 +1106,160 @@ class StudySessionAdmin(admin.ModelAdmin):
     interactions_badge.short_description = 'Interacciones'
     
     def completion_badge(self, obj):
-        scroll_depth = obj.max_scroll_depth or 0
+        """
+        ✅ Muestra el porcentaje de completitud REAL según el tipo de material
+        """
+        material = obj.material
         
-        if scroll_depth >= 90:
+        # Calcular completion según tipo de material
+        if material.material_type == 'flashcard':
+            # Contar flashcards únicas volteadas
+            flashcard_events = obj.events.filter(event_type='flashcard_flip')
+            unique_flashcards = set()
+            for event in flashcard_events:
+                if event.element_id:
+                    unique_flashcards.add(event.element_id)
+            
+            completion = (len(unique_flashcards) / 20) * 100  # 20 flashcards total
+            
+        elif material.material_type in ['decision_tree', 'mind_map']:
+            # Contar nodos únicos expandidos
+            node_events = obj.events.filter(event_type='node_expand')
+            unique_nodes = set()
+            for event in node_events:
+                if event.element_id:
+                    unique_nodes.add(event.element_id)
+            
+            # Estimar total de nodos (usar 15 como default si no se puede determinar)
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(material.html_content, 'html.parser')
+                all_nodes = soup.find_all('g', class_='arbol-nodo')
+                if not all_nodes:
+                    all_nodes = soup.find_all(attrs={'data-node': True})
+                
+                total_nodes = max(1, len(all_nodes) - 1)  # Excluir raíz
+                completion = (len(unique_nodes) / total_nodes) * 100
+            except:
+                # Fallback: usar estimación
+                completion = (len(unique_nodes) / 15) * 100
+            
+        else:
+            # Para resúmenes, usar scroll depth
+            completion = obj.max_scroll_depth or 0
+        
+        # Redondear y limitar a 100%
+        completion = min(100, round(completion, 1))
+        
+        # Iconos y colores según el porcentaje
+        if completion >= 90:
             icon = '✅'
             color = 'success'
-        elif scroll_depth >= 70:
+        elif completion >= 70:
             icon = '🟡'
             color = 'warning'
-        else:
+        elif completion >= 50:
+            icon = '🟠'
+            color = 'warning'
+        elif completion > 0:
             icon = '🔴'
             color = 'danger'
+        else:
+            icon = '⚫'
+            color = 'secondary'
         
         return format_html(
-            '{} <span class="badge badge-{}">{:.0f}%</span>',
-            icon, color, scroll_depth
+            '{} <span class="badge badge-{}">{:.1f}%</span>',
+            icon, color, completion
         )
+
     completion_badge.short_description = 'Completado'
+
+    # ============================================
+    # TAMBIÉN AGREGAR UN MÉTODO PARA MOSTRAR EL DESGLOSE
+    # ============================================
+
+    def completion_details(self, obj):
+        """
+        Muestra detalles del completion en el detalle de la sesión
+        """
+        material = obj.material
+        
+        html = '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">'
+        html += f'<h4>📊 Análisis de Completitud - {material.get_material_type_display()}</h4>'
+        
+        if material.material_type == 'flashcard':
+            flashcard_events = obj.events.filter(event_type='flashcard_flip')
+            unique_flashcards = set()
+            for event in flashcard_events:
+                if event.element_id:
+                    unique_flashcards.add(event.element_id)
+            
+            flipped = len(unique_flashcards)
+            total = 20
+            completion = (flipped / total) * 100
+            
+            html += f'''
+            <p><strong>Tipo:</strong> Flashcards</p>
+            <p><strong>Tarjetas volteadas:</strong> {flipped} / {total}</p>
+            <p><strong>IDs únicos:</strong> {sorted(unique_flashcards)}</p>
+            <div class="progress" style="height: 25px;">
+                <div class="progress-bar bg-{"success" if completion >= 90 else "warning" if completion >= 50 else "danger"}" 
+                    style="width: {completion}%">
+                    {completion:.1f}%
+                </div>
+            </div>
+            '''
+            
+        elif material.material_type in ['decision_tree', 'mind_map']:
+            node_events = obj.events.filter(event_type='node_expand')
+            unique_nodes = set()
+            for event in node_events:
+                if event.element_id:
+                    unique_nodes.add(event.element_id)
+            
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(material.html_content, 'html.parser')
+                all_nodes = soup.find_all('g', class_='arbol-nodo')
+                if not all_nodes:
+                    all_nodes = soup.find_all(attrs={'data-node': True})
+                total = max(1, len(all_nodes) - 1)
+            except:
+                total = 15  # Estimación
+            
+            expanded = len(unique_nodes)
+            completion = (expanded / total) * 100
+            
+            html += f'''
+            <p><strong>Tipo:</strong> {material.get_material_type_display()}</p>
+            <p><strong>Nodos expandidos:</strong> {expanded} / {total}</p>
+            <p><strong>IDs únicos:</strong> {sorted(unique_nodes)}</p>
+            <div class="progress" style="height: 25px;">
+                <div class="progress-bar bg-{"success" if completion >= 90 else "warning" if completion >= 50 else "danger"}" 
+                    style="width: {completion}%">
+                    {completion:.1f}%
+                </div>
+            </div>
+            '''
+            
+        else:
+            scroll_depth = obj.max_scroll_depth or 0
+            html += f'''
+            <p><strong>Tipo:</strong> Resumen</p>
+            <p><strong>Profundidad de scroll:</strong> {scroll_depth:.1f}%</p>
+            <div class="progress" style="height: 25px;">
+                <div class="progress-bar bg-{"success" if scroll_depth >= 90 else "warning" if scroll_depth >= 50 else "danger"}" 
+                    style="width: {scroll_depth}%">
+                    {scroll_depth:.1f}%
+                </div>
+            </div>
+            '''
+        
+        html += '</div>'
+        return format_html(html)
+
+    completion_details.short_description = '📊 Análisis de Completitud'
     
     def actions_column(self, obj):
         """Botones de acción"""
@@ -1346,33 +1520,54 @@ class StudySessionAdmin(admin.ModelAdmin):
         return render(request, 'admin/tracking/analytics_dashboard.html', context)
     
     def heatmap_view(self, request, session_id):
-        """Vista personalizada para visualizar el heatmap"""
+        """
+        Vista personalizada para visualizar el heatmap
+        ✅ CORRECCIÓN: Serialización correcta de JSON para JavaScript
+        """
+        from django.shortcuts import render, get_object_or_404
+        import json
+        
         session = get_object_or_404(StudySession, pk=session_id)
         heatmap = session.heatmap_data.first()
         
-        # ✅ CORRECCIÓN PROBLEMA 4: Serializar correctamente los datos JSON
-        import json
-        
+        # ✅ CORRECCIÓN PROBLEMA 3: Convertir a JSON y asegurar que sea seguro para JavaScript
         if heatmap:
-            # Convertir a JSON seguro para JavaScript
-            heatmap_data = {
-                'clicks': json.dumps(heatmap.clicks if heatmap.clicks else []),
-                'mouse_movements': json.dumps(heatmap.mouse_movements if heatmap.mouse_movements else []),
-                'scroll_points': json.dumps(heatmap.scroll_points if heatmap.scroll_points else []),
-                'hot_zones': json.dumps(heatmap.hot_zones if heatmap.hot_zones else [])
+            # Usar json.dumps() para convertir a string JSON
+            # Luego usar |safe en el template para que no se escape
+            heatmap_data_raw = {
+                'clicks': heatmap.clicks if heatmap.clicks else [],
+                'mouse_movements': heatmap.mouse_movements if heatmap.mouse_movements else [],
+                'scroll_points': heatmap.scroll_points if heatmap.scroll_points else [],
+                'hot_zones': heatmap.hot_zones if heatmap.hot_zones else []
             }
+            
+            # Convertir cada lista a JSON string
+            heatmap_data = {
+                'clicks': json.dumps(heatmap_data_raw['clicks']),
+                'mouse_movements': json.dumps(heatmap_data_raw['mouse_movements']),
+                'scroll_points': json.dumps(heatmap_data_raw['scroll_points']),
+                'hot_zones': json.dumps(heatmap_data_raw['hot_zones'])
+            }
+            
+            # Debug logging
+            print(f"🗺️ Heatmap data prepared for session {session_id}:")
+            print(f"  - Clicks: {len(heatmap_data_raw['clicks'])} items")
+            print(f"  - Mouse movements: {len(heatmap_data_raw['mouse_movements'])} items")
+            print(f"  - Hot zones: {len(heatmap_data_raw['hot_zones'])} items")
         else:
+            # No hay datos de heatmap
             heatmap_data = {
-                'clicks': '[]',
-                'mouse_movements': '[]',
-                'scroll_points': '[]',
-                'hot_zones': '[]'
+                'clicks': json.dumps([]),
+                'mouse_movements': json.dumps([]),
+                'scroll_points': json.dumps([]),
+                'hot_zones': json.dumps([])
             }
+            print(f"⚠️ No heatmap data found for session {session_id}")
         
         context = {
             'session': session,
             'heatmap': heatmap,
-            'heatmap_data': heatmap_data,  # ← Usar este dict en lugar de heatmap directo
+            'heatmap_data': heatmap_data,  # ← Pasar como dict con strings JSON
             'opts': self.model._meta,
             'has_view_permission': self.has_view_permission(request, session)
         }

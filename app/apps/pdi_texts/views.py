@@ -733,6 +733,8 @@ class TrackingViewSet(viewsets.ViewSet):
     def end_session(self, request):
         """
         Finaliza una sesión de estudio
+        ✅ CORRECCIÓN PROBLEMA 2: Cálculo preciso de completion_percentage
+        ✅ Compatible con UserDidacticMaterial (sin campos de agregación)
         """
         data = request.data
         session_id = data.get('session_id')
@@ -757,78 +759,168 @@ class TrackingViewSet(viewsets.ViewSet):
                 session.total_interactions = metrics.get('total_interactions', 0)
                 session.max_scroll_depth = metrics.get('max_scroll_depth', 0)
             
-            # Determinar si completó el material
-            session.completed = session.max_scroll_depth >= 90
-            
-            session.save()
-            
-            # Actualizar estadísticas del material
+            # Obtener el material
             material = session.material
-            material.total_study_time_seconds += session.total_time_seconds
-            material.active_study_time_seconds += session.active_time_seconds
-            material.total_interactions += session.total_interactions
-            material.sessions_count += 1
-            material.last_studied_at = timezone.now()
-
-            # ✅ CORRECCIÓN PROBLEMA 2 y 3: Calcular completion_percentage según tipo de material
+            
+            # ============================================
+            # ✅ CORRECCIÓN PROBLEMA 2: Calcular completion_percentage según tipo de material
+            # ============================================
+            
+            completion_percentage = 0
+            
             if material.material_type == 'flashcard':
-                # Para flashcards: contar cuántas se voltearon
-                flashcard_flip_count = session.events.filter(event_type='flashcard_flip').count()
+                # ✅ Para flashcards: contar cuántas ÚNICAS se voltearon
+                flashcard_events = session.events.filter(event_type='flashcard_flip')
+                unique_flashcards = set()
+                
+                for event in flashcard_events:
+                    if event.element_id:
+                        unique_flashcards.add(event.element_id)
+                
+                flashcard_flip_count = len(unique_flashcards)
                 total_flashcards = 20  # Siempre son 20 flashcards
-                material.completion_percentage = min(100, (flashcard_flip_count / total_flashcards) * 100)
+                
+                completion_percentage = (flashcard_flip_count / total_flashcards) * 100
                 session.completed = flashcard_flip_count >= total_flashcards
                 
-            elif material.material_type in ['decision_tree', 'mind_map']:
-                # Para árboles/mapas: contar cuántos nodos se expandieron
-                node_expand_count = session.events.filter(event_type='node_expand').count()
+                print(f"📇 Flashcards: {flashcard_flip_count}/{total_flashcards} = {completion_percentage:.1f}%")
                 
-                # Extraer el número total de nodos del HTML (buscar atributos data-node)
-                import re
+            elif material.material_type in ['decision_tree', 'mind_map']:
+                # ✅ Para árboles/mapas: contar nodos ÚNICOS expandidos
                 from bs4 import BeautifulSoup
                 
+                # Obtener IDs únicos de nodos expandidos
+                node_events = session.events.filter(event_type='node_expand')
+                unique_nodes_expanded = set()
+                
+                for event in node_events:
+                    if event.element_id:
+                        unique_nodes_expanded.add(event.element_id)
+                
+                node_expand_count = len(unique_nodes_expanded)
+                
+                # Extraer el número total de nodos del HTML
                 try:
                     soup = BeautifulSoup(material.html_content, 'html.parser')
-                    # Buscar todos los elementos con data-node o clase 'node'
-                    total_nodes = len(soup.find_all(attrs={'data-node': True}))
-                    if total_nodes == 0:
-                        total_nodes = len(soup.find_all(class_='node'))
+                    
+                    # ✅ CORRECCIÓN: Buscar nodos con múltiples estrategias
+                    all_nodes = []
+                    
+                    # Estrategia 1: Buscar elementos <g> con clase arbol-nodo
+                    nodes_g = soup.find_all('g', class_='arbol-nodo')
+                    if nodes_g:
+                        all_nodes = nodes_g
+                        print(f"🔍 Encontrados {len(nodes_g)} nodos con <g class='arbol-nodo'>")
+                    
+                    # Estrategia 2: Buscar por atributo data-node
+                    if not all_nodes:
+                        nodes_data = soup.find_all(attrs={'data-node': True})
+                        if nodes_data:
+                            all_nodes = nodes_data
+                            print(f"🔍 Encontrados {len(nodes_data)} nodos con [data-node]")
+                    
+                    # Estrategia 3: Buscar divs con clase node
+                    if not all_nodes:
+                        nodes_div = soup.find_all('div', class_='node')
+                        if nodes_div:
+                            all_nodes = nodes_div
+                            print(f"🔍 Encontrados {len(nodes_div)} nodos con <div class='node'>")
+                    
+                    # Estrategia 4: Buscar CUALQUIER <g> que tenga hijos <text> o <foreignObject>
+                    if not all_nodes:
+                        all_g_elements = soup.find_all('g')
+                        for g in all_g_elements:
+                            if g.find('text') or g.find('foreignObject'):
+                                all_nodes.append(g)
+                        if all_nodes:
+                            print(f"🔍 Encontrados {len(all_nodes)} nodos inferidos de estructura SVG")
+                    
+                    # Estrategia 5: Contar elementos <text> en el SVG (último recurso)
+                    if not all_nodes:
+                        text_elements = soup.find_all('text')
+                        # Cada <text> generalmente representa un nodo
+                        all_nodes = text_elements
+                        print(f"🔍 Encontrados {len(text_elements)} elementos <text> como nodos")
+                    
+                    print(f"📊 Total de nodos detectados antes de filtrar: {len(all_nodes)}")
+                    
+                    # Filtrar nodo raíz
+                    total_nodes = 0
+                    for node in all_nodes:
+                        # Buscar indicadores de que es raíz
+                        node_id = node.get('id', '').lower()
+                        node_class = ' '.join(node.get('class', [])).lower() if node.get('class') else ''
+                        node_text = node.get_text().lower()[:50] if hasattr(node, 'get_text') else ''
+                        
+                        is_root = any([
+                            'raiz' in node_id,
+                            'root' in node_id,
+                            'nivel-0' in node_class,
+                            'level-0' in node_class,
+                            node.get('data-level') == '0',
+                            node.get('data-nivel') == '0'
+                        ])
+                        
+                        if not is_root:
+                            total_nodes += 1
+                    
+                    # Si después de filtrar quedaron 0, significa que todos eran raíz
+                    # En ese caso, usar el total sin filtrar menos 1
+                    if total_nodes == 0 and len(all_nodes) > 0:
+                        total_nodes = len(all_nodes) - 1
+                        print(f"⚠️ Todos los nodos parecían raíz, usando total-1: {total_nodes}")
+                    
+                    # Mínimo 1 nodo para evitar división por cero
+                    total_nodes = max(1, total_nodes)
+                    
+                    print(f"🌳 Total de nodos EN EL HTML (sin raíz): {total_nodes}")
+                    print(f"🌳 Nodos únicos expandidos: {node_expand_count}")
+                    print(f"🌳 IDs expandidos: {unique_nodes_expanded}")
                     
                     if total_nodes > 0:
-                        material.completion_percentage = min(100, (node_expand_count / total_nodes) * 100)
+                        completion_percentage = (node_expand_count / total_nodes) * 100
                         session.completed = node_expand_count >= total_nodes
+                        
+                        print(f"🌳 Completion: {node_expand_count}/{total_nodes} = {completion_percentage:.1f}%")
                     else:
-                        # Fallback si no se puede determinar
-                        material.completion_percentage = session.max_scroll_depth
+                        print("⚠️ No se pudo determinar total de nodos, usando scroll depth")
+                        completion_percentage = session.max_scroll_depth
                         session.completed = session.max_scroll_depth >= 90
+                        
                 except Exception as e:
-                    # Si falla el parsing, usar scroll depth como fallback
-                    material.completion_percentage = session.max_scroll_depth
+                    print(f"❌ Error parseando HTML del árbol: {e}")
+                    completion_percentage = session.max_scroll_depth
                     session.completed = session.max_scroll_depth >= 90
                     
             elif material.material_type == 'summary':
-                # Para resúmenes: usar scroll depth (ya funciona bien)
-                material.completion_percentage = session.max_scroll_depth
+                # ✅ Para resúmenes: usar scroll depth (ya funciona bien)
+                completion_percentage = session.max_scroll_depth
                 session.completed = session.max_scroll_depth >= 90
+                print(f"📄 Resumen: scroll depth = {session.max_scroll_depth}%")
+                
             else:
                 # Por defecto: usar scroll depth
-                material.completion_percentage = session.max_scroll_depth
+                completion_percentage = session.max_scroll_depth
                 session.completed = session.max_scroll_depth >= 90
 
-            # Calcular engagement score
-            material.engagement_score = session.engagement_score()
-            material.save()
-            session.save()  # Guardar session.completed
+            # Guardar el completion_percentage en la sesión
+            # (No lo guardamos en material porque no tiene ese campo)
+            session.save()
+            
+            print(f"✅ Sesión finalizada - Completion: {completion_percentage:.1f}%")
             
             return Response({
                 'status': 'success',
                 'session_summary': {
                     'duration_seconds': session.total_time_seconds,
                     'active_time_seconds': session.active_time_seconds,
+                    'idle_time_seconds': session.idle_time_seconds,
                     'active_percentage': session.active_percentage(),
                     'engagement_score': session.engagement_score(),
                     'interactions': session.total_interactions,
                     'scroll_depth': session.max_scroll_depth,
-                    'completed': session.completed
+                    'completed': session.completed,
+                    'completion_percentage': round(completion_percentage, 2)
                 }
             })
             
@@ -837,6 +929,9 @@ class TrackingViewSet(viewsets.ViewSet):
                 'error': 'Sesión no encontrada'
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            import traceback
+            print(f"❌ Error en end_session: {e}")
+            print(traceback.format_exc())
             return Response({
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)

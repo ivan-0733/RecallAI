@@ -566,6 +566,15 @@ class UserDidacticMaterial(models.Model):
         related_name='didactic_materials',
         verbose_name="Intento"
     )
+
+    total_nodes = models.IntegerField(
+        default=15,
+        help_text="Número total de nodos en árbol/mapa (excluyendo raíz)"
+    )
+    total_flashcards = models.IntegerField(
+        default=20,
+        help_text="Número total de flashcards en el set"
+    )
     
     material_type = models.CharField(
         max_length=20,

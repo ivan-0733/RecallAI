@@ -217,18 +217,36 @@
 {{ block.super }}
 <script>
 (function() {
-    // ✅ CORRECCIÓN PROBLEMA 4: Parsear JSON correctamente
-    const clicks = JSON.parse('{{ heatmap_data.clicks|escapejs }}');
-    const mouseMovements = JSON.parse('{{ heatmap_data.mouse_movements|escapejs }}');
-    const hotZones = JSON.parse('{{ heatmap_data.hot_zones|escapejs }}');
-
-    console.log('📍 Datos de heatmap cargados:', {
-        clicks: clicks.length,
-        mouseMovements: mouseMovements.length,
-        hotZones: hotZones.length
-    });
+    // ✅ CORRECCIÓN PROBLEMA 3: Parsear JSON correctamente con |safe filter
+    // Los datos vienen ya como strings JSON desde el backend
+    
+    let clicks, mouseMovements, hotZones;
+    
+    try {
+        // Los datos ya vienen serializados como JSON strings, solo necesitamos parsearlos
+        clicks = JSON.parse('{{ heatmap_data.clicks|safe }}');
+        mouseMovements = JSON.parse('{{ heatmap_data.mouse_movements|safe }}');
+        hotZones = JSON.parse('{{ heatmap_data.hot_zones|safe }}');
+        
+        console.log('✅ Datos de heatmap parseados correctamente:', {
+            clicks: clicks.length,
+            mouseMovements: mouseMovements.length,
+            hotZones: hotZones.length
+        });
+    } catch (error) {
+        console.error('❌ Error parseando datos de heatmap:', error);
+        // Fallback a arrays vacíos
+        clicks = [];
+        mouseMovements = [];
+        hotZones = [];
+    }
     
     const canvas = document.getElementById('heatmapCanvas');
+    if (!canvas) {
+        console.error('❌ Canvas no encontrado');
+        return;
+    }
+    
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('heatmapContainer');
     const clickPointsLayer = document.getElementById('clickPointsLayer');
@@ -241,8 +259,8 @@
     function render() {
         // Limpiar canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        clickPointsLayer.innerHTML = '';
-        hotZonesLayer.innerHTML = '';
+        if (clickPointsLayer) clickPointsLayer.innerHTML = '';
+        if (hotZonesLayer) hotZonesLayer.innerHTML = '';
         
         // Dibujar fondo (simulando el contenido del material)
         ctx.fillStyle = '#ffffff';
@@ -283,8 +301,14 @@
     }
     
     function renderClicks() {
+        if (!clicks || clicks.length === 0) {
+            console.log('⚠️ No hay datos de clicks para renderizar');
+            return;
+        }
+        
         clicks.forEach(click => {
-            const x = (click.x / 1920) * canvas.width;  // Normalizar
+            // Normalizar coordenadas (asumiendo resolución 1920x1080 como base)
+            const x = (click.x / 1920) * canvas.width;
             const y = (click.y / 1080) * canvas.height;
             
             // Dibujar punto de clic
@@ -302,10 +326,15 @@
             ctx.arc(x, y, 30, 0, 2 * Math.PI);
             ctx.fill();
         });
+        
+        console.log(`✅ Renderizados ${clicks.length} clicks`);
     }
     
     function renderMouseMovements() {
-        if (mouseMovements.length < 2) return;
+        if (!mouseMovements || mouseMovements.length < 2) {
+            console.log('⚠️ No hay suficientes datos de movimiento del mouse');
+            return;
+        }
         
         ctx.strokeStyle = `rgba(0, 0, 255, ${opacity * 0.3})`;
         ctx.lineWidth = 2;
@@ -323,9 +352,15 @@
         });
         
         ctx.stroke();
+        console.log(`✅ Renderizados ${mouseMovements.length} movimientos de mouse`);
     }
     
     function renderHotZones() {
+        if (!hotZones || hotZones.length === 0) {
+            console.log('⚠️ No hay zonas calientes para renderizar');
+            return;
+        }
+        
         hotZones.forEach(zone => {
             const x = (zone.x / 1920) * canvas.width;
             const y = (zone.y / 1080) * canvas.height;
@@ -348,27 +383,40 @@
             ctx.font = 'bold 12px Arial';
             ctx.fillText(`${zone.intensity.toFixed(0)}%`, x + 5, y + 15);
         });
+        
+        console.log(`✅ Renderizadas ${hotZones.length} zonas calientes`);
     }
     
     // Event listeners
-    document.getElementById('visualizationType').addEventListener('change', (e) => {
-        currentVisualization = e.target.value;
-        render();
-    });
+    const visualizationType = document.getElementById('visualizationType');
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityValue = document.getElementById('opacityValue');
     
-    document.getElementById('opacitySlider').addEventListener('input', (e) => {
-        opacity = e.target.value / 100;
-        document.getElementById('opacityValue').textContent = e.target.value + '%';
-        render();
-    });
+    if (visualizationType) {
+        visualizationType.addEventListener('change', (e) => {
+            currentVisualization = e.target.value;
+            render();
+        });
+    }
+    
+    if (opacitySlider && opacityValue) {
+        opacitySlider.addEventListener('input', (e) => {
+            opacity = e.target.value / 100;
+            opacityValue.textContent = e.target.value + '%';
+            render();
+        });
+    }
     
     // Renderizar inicial
+    console.log('🎨 Iniciando renderizado del heatmap...');
     render();
     
-    console.log('Heatmap cargado:', {
+    // Log final
+    console.log('📊 Resumen del heatmap:', {
         clicks: clicks.length,
         mouseMovements: mouseMovements.length,
-        hotZones: hotZones.length
+        hotZones: hotZones.length,
+        canvasSize: `${canvas.width}x${canvas.height}`
     });
 })();
 </script>
