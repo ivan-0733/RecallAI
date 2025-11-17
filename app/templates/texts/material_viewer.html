@@ -11,7 +11,6 @@
     
     <style>
         :root {
-            /* Se definen los colores base para cada tipo */
             --color-flashcard-bg: #e3f2fd;
             --color-flashcard-fg: #1976d2;
             --color-decision_tree-bg: #f3e5f5;
@@ -55,7 +54,6 @@
             position: relative;
         }
         
-        /* Se aplican los fondos de color dinámicamente */
         .header-title-area.type-flashcard {
             background: linear-gradient(135deg, var(--color-flashcard-bg) 0%, #ffffff 100%);
             color: var(--color-flashcard-fg);
@@ -124,13 +122,13 @@
             color: #fff;
         }
 
-        /* --- INICIO DE ESTILOS PARA TÓPICOS --- */
+        /* --- ESTILOS PARA TÓPICOS --- */
         .topics-section {
             padding: 20px 30px;
             background: #fff;
         }
         .topics-section.weak {
-            border-bottom: 1px solid #eee; /* Línea divisoria */
+            border-bottom: 1px solid #eee;
         }
         
         .topics-title {
@@ -141,7 +139,7 @@
             letter-spacing: 0.5px;
         }
         .topics-title.weak { color: #721c24; }
-        .topics-title.strong { color: #155724; } /* Título verde oscuro */
+        .topics-title.strong { color: #155724; }
 
         .topics-list { 
             display: flex; 
@@ -149,7 +147,6 @@
             gap: 10px; 
         }
         
-        /* Tags de Temas Débiles (ROJOS) */
         .topic-tag-red { 
             background: #fff5f5; 
             border: 1px solid #f5c6cb; 
@@ -167,11 +164,10 @@
             font-size: 12px;
         }
         
-        /* Tags de Temas Dominados (VERDES) */
         .topic-tag-green { 
-            background: #f0fff4; /* Fondo verde muy claro */
-            border: 1px solid #c3e6cb; /* Borde verde claro */
-            color: #155724; /* Texto verde oscuro */
+            background: #f0fff4; 
+            border: 1px solid #c3e6cb; 
+            color: #155724; 
             padding: 6px 14px; 
             border-radius: 20px; 
             font-size: 13px; 
@@ -181,10 +177,9 @@
         }
         .topic-tag-green .icon {
             margin-right: 8px;
-            color: #28a745; /* Icono verde */
+            color: #28a745; 
             font-size: 12px;
         }
-        /* --- FIN DE ESTILOS PARA TÓPICOS --- */
 
         .material-content { 
             background: white; 
@@ -213,14 +208,12 @@
             border-width: 0.3em; 
         }
 
-        /* --- (ACTUALIZADO) ESTILOS PARA EL MAPA D3 "HERMOSO" --- */
+        /* --- ESTILOS PARA EL MAPA D3 --- */
         #arbol-container {
-            /* Fondo blanco para el lienzo */
             background-color: #ffffff !important; 
         }
         
         .arbol-link {
-            /* Color de línea gris y sólido */
             stroke: #ccc;
             stroke-width: 2px;
             fill: none;
@@ -229,54 +222,44 @@
         g.arbol-nodo {
             cursor: pointer;
             filter: drop-shadow(0 4px 10px rgba(0,0,0,0.08));
-            /* (CORREGIDO) La transición de 'transform' la maneja D3 */
             transition: filter 0.3s ease;
         }
         g.arbol-nodo:hover {
             filter: drop-shadow(0 6px 16px rgba(0,0,0,0.12));
-            /* (CORREGIDO) Eliminado el transform:scale() para evitar vibraciones */
         }
         
         g.arbol-nodo rect {
-            /* Transición solo para el borde */
-            transition: stroke 0.3s ease, fill 0.3s ease; 
+            transition: stroke 0.3s ease, fill 0.3s ease, height 0.3s ease, y 0.3s ease; 
         }
         
-        /* (NUEVO) Estilo para el div dentro del foreignObject */
         .arbol-texto-contenedor {
-            /* Este div maneja el centrado y el ajuste de texto */
             height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             text-align: center;
-            padding: 0 10px; /* Padding interno para que el texto no toque los bordes */
-            box-sizing: border-box; /* Importante para el padding */
+            padding: 0 8px;
+            box-sizing: border-box;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 13px;
             font-weight: 500;
             color: #333333;
-            /* Ajuste de texto automático */
             word-wrap: break-word; 
-            word-break: break-word; /* Opcional: para palabras muy largas */
             line-height: 1.2;
+            overflow: hidden;
         }
 
-        /* (NUEVO) Estilo especial para el texto de temas débiles */
         .arbol-texto-contenedor.tema-debil {
             color: #E74C3C;
             font-weight: bold;
         }
         
-        /* (NUEVO) Estilo para el texto de la raíz */
         .arbol-texto-contenedor.raiz {
             font-size: 15px;
             font-weight: bold;
         }
 
-
-        /* Estilo para el botón de expandir */
         .arbol-boton-toggle circle {
             transition: all 0.3s ease;
         }
@@ -288,12 +271,11 @@
         }
 
     </style>
-    </head>
+</head>
 <body>
     <div class="material-container">
         
         <div class="material-header">
-    
             <div class="header-title-area" id="headerTitleArea">
                 <div class="header-title">
                     <p id="materialType">Cargando...</p>
@@ -308,17 +290,15 @@
         
             <div class="topics-section strong" id="strongTopicsContainer" style="display: none;">
                 <h3 class="topics-title strong">Temas dominados (Temas generales)</h3>
-                <div class="topics-list" id="strongTopicsList">
-                    </div>
+                <div class="topics-list" id="strongTopicsList"></div>
             </div>
             
             <div class="topics-section weak" id="weakTopicsContainer" style="display: none;">
                 <h3 class="topics-title weak">Temas débiles</h3>
-                <div class="topics-list" id="weakTopicsList">
-                    </div>
+                <div class="topics-list" id="weakTopicsList"></div>
             </div>
-            
         </div>
+
         <div class="material-content">
             <div id="loadingSpinner" class="loading-spinner">
                 <div class="spinner-border text-primary spinner-border-custom" role="status">
@@ -326,8 +306,7 @@
                 </div>
                 <p class="mt-3 text-muted" id="loadingText">Generando tu material personalizado, esto puede tardar unos minutos...</p>
             </div>
-            <div id="materialContent" style="display: none;">
-                </div>
+            <div id="materialContent" style="display: none;"></div>
         </div>
     </div>
 
@@ -335,16 +314,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    
     <script src="https://d3js.org/d3.v7.min.js"></script>
 
     <script>
-    let materialData = null;
-        // Se obtiene el ID del material desde la URL
+        let materialData = null;
         const materialId = window.location.pathname.split('/')[2]; 
 
         $(document).ready(function() {
-            // Se inicia la carga directa del material
             loadMaterial();
         });
 
@@ -356,7 +332,6 @@
                 return;
             }
 
-            // Se llama al endpoint de la API para obtener el material
             const apiUrl = `/api/materials/${materialId}/`;
 
             $.ajax({
@@ -366,13 +341,11 @@
                     'Authorization': 'Bearer ' + token
                 },
                 success: function(material) {
-                    // Si la llamada es exitosa, se muestra el material
                     materialData = material;
                     displayMaterial(materialData);
                     loadAndDisplayStrongTopics(material.text, material.weak_topics);
                 },
                 error: function(xhr) {
-                    // Se manejan errores
                     if (xhr.status === 401) {
                         localStorage.clear();
                         window.location.href = '/login/';
@@ -386,8 +359,6 @@
                         toastr.error('Error al cargar el material.');
                         $('#loadingSpinner').show();
                         $('#loadingText').text('Ocurrió un error inesperado al cargar el material.');
-                        $('#materialType').text('Error');
-                        $('#materialTitle').text('Error de carga');
                     }
                 }
             });
@@ -396,127 +367,68 @@
         function displayMaterial(material) {
             materialData = material;
 
-            // Se añade la clase de tipo al contenedor de la cabecera para cambiar el color
             $('#headerTitleArea').addClass('type-' + material.material_type);
-
-            // Se actualiza el tipo de material (ej: FLASHCARDS)
             $('#materialType').text(material.material_type_display);
-            
-            // Se establece el título del texto en el H1 (ej: Procesamiento de Imágenes)
             $('#materialTitle').text(material.text_title);
-
-            // Se actualiza el título de la pestaña del navegador
             document.title = `${material.material_type_display}: ${material.text_title} - RecallAI`;
             
-            // Se muestran los temas débiles (Rojos)
             if (material.weak_topics && material.weak_topics.length > 0) {
                 const topicsHTML = material.weak_topics.map(topic => 
                     `<span class="topic-tag-red"><i class="fas fa-exclamation-triangle icon"></i> ${topic}</span>`
                 ).join('');
-                
                 $('#weakTopicsList').html(topicsHTML);
                 $('#weakTopicsContainer').show();
             }
 
-            // ============================================
-            // DETECCIÓN MEJORADA DE Mapa Conceptual
-            // ============================================
+            // === LÓGICA MAPA CONCEPTUAL ===
             if (material.material_type === 'decision_tree') {
-                console.log('🌳 Tipo de material: decision_tree detectado');
-                console.log('📄 Contenido recibido (primeros 200 chars):', material.html_content.substring(0, 200));
-                
                 let arbolData = null;
-                
                 try {
-                    // INTENTO 1: Parsear directamente
                     arbolData = JSON.parse(material.html_content);
-                    console.log('✅ JSON parseado exitosamente (método directo)');
                 } catch (e1) {
-                    console.warn('⚠️ Fallo parseo directo:', e1.message);
-                    
                     try {
-                        // INTENTO 2: Limpiar markdown y extraer JSON
                         let cleanContent = material.html_content.trim();
-                        
-                        // Remover bloques de código markdown
                         if (cleanContent.startsWith('```')) {
                             cleanContent = cleanContent.replace(/```json\n?/g, '').replace(/```\n?/g, '');
                         }
-                        
-                        // Buscar el primer { y el último }
                         const jsonStart = cleanContent.indexOf('{');
                         const jsonEnd = cleanContent.lastIndexOf('}');
-                        
                         if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
                             cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
                         }
-                        
                         arbolData = JSON.parse(cleanContent);
-                        console.log('✅ JSON parseado exitosamente (método limpieza)');
-                        
                     } catch (e2) {
-                        console.error('❌ Error parseando mapa (ambos métodos):', e2);
-                        console.error('Contenido completo:', material.html_content);
-                        
                         $('#loadingSpinner').hide();
-                        $('#materialContent').html(`
-                            <div class="alert alert-danger">
-                                <h4><i class="fas fa-exclamation-triangle"></i> Error al cargar el Mapa Conceptual</h4>
-                                <p>El formato del mapa no es válido. Por favor, intenta regenerar el material.</p>
-                                <details style="margin-top: 15px;">
-                                    <summary style="cursor: pointer; color: #0056b3; font-weight: 600;">Ver detalles técnicos</summary>
-                                    <pre style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 11px; margin-top: 10px;">${material.html_content}</pre>
-                                </details>
-                            </div>
-                        `).fadeIn();
-                        
-                        trackMaterialView(material.id);
+                        $('#materialContent').html('<div class="alert alert-danger">Error formato JSON</div>').fadeIn();
                         return;
                     }
                 }
                 
-                // Validar estructura del JSON
                 if (!arbolData || !arbolData.datos || !arbolData.datos.nodos) {
-                    console.error('❌ Estructura del mapa inválida:', arbolData);
                     $('#loadingSpinner').hide();
-                    $('#materialContent').html(`
-                        <div class="alert alert-warning">
-                            <h4><i class="fas fa-exclamation-circle"></i> Estructura de mapa incompleta</h4>
-                            <p>El mapa no tiene la estructura esperada. Faltan campos obligatorios.</p>
-                            <p><strong>Se esperaba:</strong> <code>{"datos": {"nodos": [...]}}</code></p>
-                        </div>
-                    `).fadeIn();
-                    trackMaterialView(material.id);
+                    $('#materialContent').html('<div class="alert alert-warning">Datos incompletos</div>').fadeIn();
                     return;
                 }
                 
-                console.log('✅ Estructura validada. Nodos encontrados:', arbolData.datos.nodos.length);
-                
-                // Renderizar el árbol
                 $('#loadingSpinner').hide();
-                renderizarArbolDecision(arbolData); // <--- ESTA ES LA NUEVA FUNCIÓN D3 (v8 - Tree Corregida)
+                renderizarArbolDecision(arbolData);
                 trackMaterialView(material.id);
-                return; // IMPORTANTE: Salir aquí
+                return;
             }
-            // ============================================
-            // FIN DETECCIÓN ÁRBOL
-            // ============================================
+            // === FIN LÓGICA MAPA ===
 
-            // FLUJO ORIGINAL (Flashcards y otros materiales HTML)
+            // Lógica para Flashcards/Otros
             let cleanHTML;
             if (material.material_type === 'flashcard') {
                 cleanHTML = material.html_content;
-                console.log('⚠️ Flashcard: HTML insertado directamente (scripts permitidos)');
             } else {
                 cleanHTML = DOMPurify.sanitize(material.html_content, {
                     ADD_TAGS: ['style', 'script'],
                     ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
                 });
-                console.log('✅ Material sanitizado con DOMPurify');
             }
 
             $('#loadingSpinner').hide();
-            
             const contentDiv = $('#materialContent');
             contentDiv.html(cleanHTML).fadeIn();
             
@@ -525,12 +437,7 @@
                 scripts.each(function() {
                     const scriptContent = $(this).html();
                     if (scriptContent) {
-                        try {
-                            window.eval(scriptContent);
-                            console.log('✅ Script ejecutado en window scope');
-                        } catch (e) {
-                            console.error('❌ Error ejecutando script:', e);
-                        }
+                        try { window.eval(scriptContent); } catch (e) { console.error(e); }
                     }
                 });
             }
@@ -540,29 +447,16 @@
 
         function loadAndDisplayStrongTopics(textId, weakTopics) {
             const strongTopicsSection = $('#strongTopicsContainer');
-            
             fetch(`/api/texts/${textId}/quiz/`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
+                .then(response => response.ok ? response.json() : Promise.reject('Error'))
                 .then(data => {
                     if (!data.quiz || !data.quiz.questions_json) {
-                        console.warn('No quiz data found for this text, hiding strong topics section.');
                         strongTopicsSection.hide();
                         return; 
                     }
-                    
                     const questions = data.quiz.questions_json;
                     const allTopics = new Set();
-                    
-                    questions.forEach(question => {
-                        if (question.tema) {
-                            allTopics.add(question.tema);
-                        }
-                    });
+                    questions.forEach(q => { if (q.tema) allTopics.add(q.tema); });
 
                     const weakTopicsSet = new Set(weakTopics);
                     const strongTopics = [...allTopics].filter(topic => !weakTopicsSet.has(topic));
@@ -571,78 +465,99 @@
                         const topicsHTML = strongTopics.map(topic => 
                             `<span class="topic-tag-green"><i class="fas fa-check-circle icon"></i> ${topic}</span>`
                         ).join('');
-                        
                         $('#strongTopicsList').html(topicsHTML);
                         strongTopicsSection.show();
-
                     } else {
                         strongTopicsSection.hide();
                     }
                 })
-                .catch(error => {
-                    console.error('Error fetching strong topics:', error);
-                    strongTopicsSection.hide();
-                });
+                .catch(e => strongTopicsSection.hide());
         }
 
         function trackMaterialView(materialId) {
-            const token = localStorage.getItem('access_token');
             console.log('Material viewed:', materialId);
         }
 
         // ============================================
-        // === INICIO CÓDIGO D3 v8 (LAYOUT DE MAPA "HERMOSO" CORREGIDO) ===
+        // === CÓDIGO D3 MEJORADO (ORDENAMIENTO + COMPRESIÓN INTELIGENTE) ===
         // ============================================
 
-        // --- Variables globales para D3 Tree ---
         let svg, g, treeLayout, rootNode;
-        let i = 0; // Contador para IDs únicos si es necesario
+        let i = 0;
+        const transitionDuration = 400;
         
-        // --- (AJUSTABLE) Duración de la animación ---
-        const transitionDuration = 400; // 400ms, más rápido
+        // Configuración Base
+        const nodeWidth = 200;  // Ancho fijo
+        const nodeHorizontalSeparation = 220; // REDUCIDO: Espacio entre columnas más pegado
+        const baseVerticalSeparation = 80;    // REDUCIDO: Espacio base compacto
 
-        // --- (AJUSTABLE) Espaciado y tamaño del mapa ---
-        const nodeWidth = 200;                  // Ancho fijo del rectángulo
-        const nodeHeight = 60;                  // Alto fijo del rectángulo
-        const nodeHorizontalSeparation = 260;   // Espacio horizontal ENTRE nodos (columna a columna)
-        
-        // --- (CORREGIDO) Espaciado vertical más junto ---
-        const nodeVerticalSeparation = 80;      
+        // Función para medir la altura REAL que ocupará el texto
+        function calcularAlturasReales(nodos) {
+            const dummy = document.createElement('div');
+            dummy.style.position = 'absolute';
+            dummy.style.visibility = 'hidden';
+            dummy.style.width = (nodeWidth - 16) + 'px'; 
+            dummy.style.height = 'auto'; 
+            
+            dummy.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+            dummy.style.fontSize = '13px';
+            dummy.style.fontWeight = '500';
+            dummy.style.lineHeight = '1.2';
+            dummy.style.padding = '0 8px';
+            dummy.style.boxSizing = 'border-box';
+            dummy.style.whiteSpace = 'normal';
+            dummy.style.wordWrap = 'break-word';
 
-        // 1. Función principal que inicia el renderizado
+            document.body.appendChild(dummy);
+
+            nodos.forEach(n => {
+                dummy.innerHTML = n.texto || "Texto vacío";
+                const alturaRenderizada = dummy.getBoundingClientRect().height;
+                // Altura final = texto + padding (~24px). Mínimo 60px.
+                n.alturaReal = Math.max(60, alturaRenderizada + 24);
+            });
+
+            document.body.removeChild(dummy);
+        }
+
         function renderizarArbolDecision(datos) {
             const container = $('#materialContent');
             
-            if (!datos.datos || !datos.datos.nodos) {
-                container.html('<div class="alert alert-danger">Error: Estructura del mapa inválida</div>').fadeIn();
-                return;
+            // 1. Calcular alturas reales
+            if (datos.datos && datos.datos.nodos) {
+               calcularAlturasReales(datos.datos.nodos);
             }
 
-            // 1. Convertir lista plana a jerarquía (¡CRÍTICO!)
+            // 2. Convertir a jerarquía
             try {
                 rootNode = d3.stratify()
                     .id(d => d.id)
                     .parentId(d => d.padre)
                     (datos.datos.nodos);
             } catch (error) {
-                console.error("Error al estratificar los datos:", error);
-                console.error("Datos que fallaron:", datos.datos.nodos);
-                container.html('<div class="alert alert-danger">Error: Los datos del mapa tienen una jerarquía rota (ej. un hijo sin padre).</div>').fadeIn();
+                container.html('<div class="alert alert-danger">Error en jerarquía de datos</div>').fadeIn();
                 return;
             }
+
+            // 3. Ordenar: Rojos (weak) siempre arriba
+            rootNode.each(node => {
+                if (node.children) {
+                    node.children.sort((a, b) => {
+                        const weakA = a.data.es_tema_debil ? 1 : 0;
+                        const weakB = b.data.es_tema_debil ? 1 : 0;
+                        return weakB - weakA; 
+                    });
+                }
+            });
             
-            // 2. Definir dimensiones y márgenes
-            const margin = { top: 20, right: 120, bottom: 20, left: 160 }; // Más margen izquierdo para el nodo raíz
-            const height = 800; // Alto fijo del viewport
+            // 4. Configurar layout COMPACTO INICIAL
+            // Usamos un espacio pequeño por defecto (80px) para que todo empiece pegado
+            treeLayout = d3.tree().nodeSize([baseVerticalSeparation, nodeHorizontalSeparation]);
 
-            // 3. (CORREGIDO) Crear el layout de mapa de D3
-            treeLayout = d3.tree().nodeSize([nodeVerticalSeparation, nodeHorizontalSeparation]);
-
-            // 4. Limpiar contenedor y añadir HTML del SVG
+            // 5. Preparar HTML
             const html = `
                 <div id="arbol-container" style="width: 100%; height: 800px; position: relative; overflow: hidden; background: #ffffff; border-radius: 12px;">
                     <svg id="arbol-svg" width="100%" height="100%"></svg>
-                    
                     <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 1000;">
                         <button id="zoom-in" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">+</button>
                         <button id="zoom-out" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">−</button>
@@ -652,139 +567,137 @@
             `;
             container.html(html).fadeIn();
 
-            // 5. Seleccionar SVG y añadir grupo principal
-            svg = d3.select("#arbol-svg");
-            
-            g = svg.append("g")
-                   .attr("transform", `translate(${margin.left}, ${margin.top})`);
-            
-            // 6. Definir el comportamiento de Zoom y Arrastre (Pan)
-            const zoom = d3.zoom()
-                .scaleExtent([0.1, 2])
-                .on("zoom", (event) => {
-                    g.attr("transform", event.transform);
-                });
-            
-            svg.call(zoom)
-               .on("dblclick.zoom", null) // Deshabilitar zoom con doble click
-               .style("cursor", "grab"); // Cursor para indicar que se puede arrastrar
+            const margin = { top: 20, right: 120, bottom: 20, left: 160 };
+            const height = 800;
 
-            // 7. Conectar botones de zoom
+            svg = d3.select("#arbol-svg");
+            g = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top})`);
+            
+            const zoom = d3.zoom().scaleExtent([0.1, 2]).on("zoom", (event) => g.attr("transform", event.transform));
+            svg.call(zoom).on("dblclick.zoom", null).style("cursor", "grab");
+
             const initialTransform = d3.zoomIdentity.translate(margin.left, height / 2);
             d3.select("#zoom-in").on("click", () => svg.transition().duration(300).call(zoom.scaleBy, 1.2));
             d3.select("#zoom-out").on("click", () => svg.transition().duration(300).call(zoom.scaleBy, 0.8));
             d3.select("#zoom-reset").on("click", () => svg.transition().duration(300).call(zoom.transform, initialTransform));
             
-            // 8. (CORREGIDO) Colapsar nodos iniciales
+            // Colapsar inicial
             rootNode.descendants().forEach(d => {
                 d.data.id = d.id;
-                // (NUEVA LÓGICA) Colapsa todo lo que esté en el nivel 1 o más profundo (depth > 0)
-                if (d.depth > 0) { 
-                    if(d.children) { // Solo si tiene hijos
-                        d._children = d.children; // Guarda los hijos
-                        d.children = null; // Colapsa
-                    }
+                if (d.depth > 0 && d.children) { 
+                    d._children = d.children; 
+                    d.children = null; 
                 }
             });
             
-            // 9. Guardar posición inicial (para animación de entrada)
             rootNode.x0 = height / 2;
             rootNode.y0 = 0;
 
-            // 10. Renderizar por primera vez
             updateArbol(rootNode);
-            
-            // 11. Centrar el nodo raíz inicial
             svg.call(zoom.transform, initialTransform);
         }
 
-        // 2. Función de Actualización (El corazón del renderizado)
         function updateArbol(source) {
+            // A. Ejecutar Layout Base (Compacto)
+            treeLayout(rootNode);
+
+            // B. [NUEVO] Ajuste de Espaciado Dinámico (Post-Procesamiento)
+            // Ordenamos todos los nodos por su posición vertical (x) calculada por D3
+            let nodes = rootNode.descendants().sort((a, b) => a.x - b.x);
             
-            // 1. Calcular el nuevo layout
-            const treeData = treeLayout(rootNode);
+            // Recorremos de arriba a abajo ajustando posiciones para evitar solapamientos
+            for (let i = 1; i < nodes.length; i++) {
+                let prev = nodes[i-1];
+                let curr = nodes[i];
+                
+                // Calculamos la distancia MÍNIMA necesaria entre el nodo anterior y este
+                // (Mitad de altura de uno + Mitad de altura del otro + 15px de margen)
+                let minGap = (prev.data.alturaReal / 2) + (curr.data.alturaReal / 2) + 15;
+                
+                // Distancia actual que les dio el layout compacto
+                let currentGap = curr.x - prev.x;
+                
+                // Si la distancia actual es menor a la necesaria (se solapan), empujamos
+                if (currentGap < minGap) {
+                    let pushAmount = minGap - currentGap;
+                    curr.x += pushAmount;
+                    // IMPORTANTE: Esto solo empuja al nodo actual respecto al anterior
+                    // En la siguiente iteración (i+1), el siguiente nodo se comparará
+                    // con la NUEVA posición de 'curr', propagando el empuje hacia abajo.
+                }
+            }
 
-            // 2. Obtener listas de nodos y enlaces
-            const nodes = treeData.descendants();
-            const links = treeData.links();
-
-            // --- 4. ACTUALIZAR NODOS ---
+            // C. Renderizar normalmente con las nuevas coordenadas X ajustadas
+            const links = rootNode.links();
             const node = g.selectAll("g.arbol-nodo")
                 .data(nodes, d => d.id || (d.id = ++i));
 
-            // --- Nodos que Entran (Nuevos) ---
+            // Enter
             const nodeEnter = node.enter().append("g")
                 .attr("class", "arbol-nodo")
-                .attr("transform", d => `translate(${source.y0},${source.x0})`) // Inicia en la posición del padre
+                .attr("transform", d => `translate(${source.y0},${source.x0})`)
                 .style("opacity", 0)
-                .on("click", toggleNodo); // Asigna el click
+                .on("click", toggleNodo);
 
-            // (ACTUALIZADO) Añadir Rectángulo
+            // Rect con altura dinámica
             nodeEnter.append("rect")
                 .attr("width", nodeWidth)
-                .attr("height", nodeHeight)
-                .attr("x", -nodeWidth / 2) // Centrar el rectángulo
-                .attr("y", -nodeHeight / 2) // Centrar el rectángulo
+                .attr("height", 0) 
+                .attr("x", -nodeWidth / 2)
                 .attr("rx", d => obtenerEstiloNodo(d.data.nivel, d.data.es_tema_debil).borderRadius)
                 .style("stroke-width", "2px");
 
-            // (NUEVO) Añadir foreignObject para el texto HTML
+            // ForeignObject con altura dinámica
             nodeEnter.append("foreignObject")
-                .attr("width", nodeWidth - 20) // Ancho - padding (10px a cada lado)
-                .attr("height", nodeHeight - 10) // Alto - padding (5px arriba/abajo)
-                .attr("x", - (nodeWidth / 2) + 10) // Posición x + padding
-                .attr("y", - (nodeHeight / 2) + 5) // Posición y + padding
-                .style("pointer-events", "none") // Evita que intercepte el click
+                .attr("width", nodeWidth - 16)
+                .attr("height", 0) 
+                .attr("x", -(nodeWidth / 2) + 8)
+                .style("pointer-events", "none")
                 .append("xhtml:div")
                 .attr("class", "arbol-texto-contenedor");
 
-
-            // Añadir Botón de Expandir
-            const botonToggle = nodeEnter.append("g")
-                .attr("class", "arbol-boton-toggle");
-
+            const botonToggle = nodeEnter.append("g").attr("class", "arbol-boton-toggle");
             botonToggle.append("circle").attr("r", 12).style("stroke-width", "2px");
+            botonToggle.append("text").attr("text-anchor", "middle").attr("dy", "0.35em").attr("font-size", "14px").attr("font-weight", "bold");
 
-            botonToggle.append("text")
-                .attr("text-anchor", "middle")
-                .attr("dy", "0.35em")
-                .attr("font-size", "14px")
-                .attr("font-weight", "bold");
-
-            // --- Nodos que se Actualizan (Transición) ---
+            // Update
             const nodeUpdate = nodeEnter.merge(node);
             
-            // Transición a la nueva posición
             nodeUpdate.transition()
                 .duration(transitionDuration)
-                .attr("transform", d => `translate(${d.y},${d.x})`)
+                .attr("transform", d => `translate(${d.y},${d.x})`) // Usa la d.x AJUSTADA
                 .style("opacity", 1);
             
-            // Actualizar el contenido y estilo de los nodos
             nodeUpdate.each(function(d) {
                 const estilo = obtenerEstiloNodo(d.data.nivel, d.data.es_tema_debil);
+                const h = d.data.alturaReal; 
 
-                // Actualizar Rectángulo (Colores "hermosos")
+                // Actualizar Rect
                 d3.select(this).select("rect")
                     .transition().duration(transitionDuration)
-                    .attr("fill", estilo.background) // Fondo blanco
-                    .attr("stroke", estilo.border);   // Borde de color
+                    .attr("height", h)
+                    .attr("y", -h / 2) 
+                    .attr("fill", estilo.background)
+                    .attr("stroke", estilo.border);
 
-                // (NUEVO) Actualizar Texto en el foreignObject
+                // Actualizar Texto
                 let claseTexto = "arbol-texto-contenedor";
                 if (d.data.es_tema_debil) claseTexto += " tema-debil";
-                if (d.depth === 0) claseTexto += " raiz"; // Clase especial para la raíz
+                if (d.depth === 0) claseTexto += " raiz";
 
-                d3.select(this).select(".arbol-texto-contenedor")
-                    .html(d.data.texto) // Asigna el HTML (texto)
-                    .attr("class", claseTexto); // Añade clases de estilo
+                // Actualizar ForeignObject
+                d3.select(this).select("foreignObject")
+                    .attr("height", h - 10) 
+                    .attr("y", -(h / 2) + 5) 
+                    .select("div")
+                    .html(d.data.texto)
+                    .attr("class", claseTexto);
 
-                // Actualizar Botón
+                // Botón
                 const boton = d3.select(this).select(".arbol-boton-toggle");
-                
-                if (d.children || d._children) { // Solo mostrar si tiene hijos (abiertos o colapsados)
+                if (d.children || d._children) {
                     boton.style("display", null)
-                         .attr("transform", `translate(${nodeWidth / 2 + 15}, 0)`);
+                         .attr("transform", `translate(${nodeWidth / 2 + 15}, 0)`); 
                     
                     boton.select("circle")
                         .transition().duration(transitionDuration)
@@ -793,121 +706,90 @@
                     
                     boton.select("text")
                         .attr("fill", estilo.buttonColor)
-                        .text(d.children ? "−" : "+"); // Si d.children existe, está abierto (mostrar -)
+                        .text(d.children ? "−" : "+");
                 } else {
-                    boton.style("display", "none"); // Ocultar si es un nodo hoja
+                    boton.style("display", "none");
                 }
             });
 
-            // --- Nodos que Salen (Eliminados) ---
-            const nodeExit = node.exit().transition()
+            // Exit
+            node.exit().transition()
                 .duration(transitionDuration)
-                .attr("transform", d => `translate(${source.y},${source.x})`) // Vuelve a la posición del padre
+                .attr("transform", d => `translate(${source.y},${source.x})`)
                 .style("opacity", 0)
                 .remove();
 
-            // --- 5. ACTUALIZAR ENLACES (Links) ---
+            // Links
             const link = g.selectAll("path.arbol-link")
                 .data(links, d => d.target.id);
 
-            // --- Enlaces que Entran (Nuevos) ---
-            const linkEnter = link.enter().insert("path", "g") // Insertar detrás de los nodos
+            const linkEnter = link.enter().insert("path", "g")
                 .attr("class", "arbol-link")
                 .attr("d", d => {
-                    const o = { x: source.x0, y: source.y0 }; // Posición inicial del padre
-                    return diagonal({ source: o, target: o }); // Dibuja el link desde el padre
+                    const o = { x: source.x0, y: source.y0 };
+                    return diagonal({ source: o, target: o });
                 })
                 .style("stroke-opacity", 0);
 
-            // --- Enlaces que se Actualizan (Transición) ---
-            const linkUpdate = linkEnter.merge(link);
-
-            linkUpdate.transition()
+            linkEnter.merge(link).transition()
                 .duration(transitionDuration)
-                .attr("d", diagonal) // Anima a la nueva posición
-                .style("stroke-opacity", 1); // Opacidad completa para el color gris
+                .attr("d", diagonal)
+                .style("stroke-opacity", 1);
 
-            // --- Enlaces que Salen (Eliminados) ---
             link.exit().transition()
                 .duration(transitionDuration)
                 .attr("d", d => {
-                    const o = { x: source.x, y: source.y }; // Posición final del padre
-                    return diagonal({ source: o, target: o }); // Anima el link para que colapse en el padre
+                    const o = { x: source.x, y: source.y };
+                    return diagonal({ source: o, target: o });
                 })
                 .style("stroke-opacity", 0)
                 .remove();
             
-            // 6. Guardar posiciones antiguas para la próxima transición
             nodes.forEach(d => {
                 d.x0 = d.x;
                 d.y0 = d.y;
             });
         }
         
-        // 3. Función Click (Toggle)
         function toggleNodo(event, d) {
-            // No hacer nada si el evento viene de un zoom/drag
             if (event.defaultPrevented) return; 
-
-            if (d.children) { // Si está abierto, colapsar
+            if (d.children) {
                 d._children = d.children;
                 d.children = null;
-            } else if (d._children) { // Si está colapsado, expandir
+            } else if (d._children) {
                 d.children = d._children;
                 d._children = null;
             }
-            updateArbol(d); // 'd' es el nodo "fuente" de la animación
+            updateArbol(d);
         }
 
-        // 4. Generador de Path (Curva de Bézier Horizontal)
         function diagonal(d) {
-            // Genera el path de la curva
             return d3.linkHorizontal()
-                     .x(d => d.y) // La 'x' en pantalla es nuestra 'y' en los datos (depth)
-                     .y(d => d.x) // La 'y' en pantalla es nuestra 'x' en los datos (posición vertical)
+                     .x(d => d.y)
+                     .y(d => d.x)
                      (d);
         }
 
-        // 5. (NUEVA PALETA "HERMOSA") Funciones de Estilo 
         function obtenerEstiloNodo(nivel, esTemaDebil) {
-            
-            // Paleta de colores por TIPO de nodo
             const paleta = {
-                raiz:   { border: '#8E44AD', button: '#7D3C98' }, // Raíz (Púrpura)
-                debil:  { border: '#E74C3C', button: '#C0392B' }, // Tema Débil (Rojo)
-                fuerte: { border: '#2ECC71', button: '#28B463' }  // Tema Fuerte (Verde)
+                raiz:   { border: '#8E44AD', button: '#7D3C98' },
+                debil:  { border: '#E74C3C', button: '#C0392B' },
+                fuerte: { border: '#2ECC71', button: '#28B463' }
             };
             
             let estiloBase;
-
-            if (nivel === 0) {
-                // Nivel 0 siempre es la Raíz (Púrpura)
-                estiloBase = paleta.raiz;
-            } else if (esTemaDebil) {
-                // Si es tema débil (en cualquier nivel), es Rojo
-                estiloBase = paleta.debil;
-            } else {
-                // Si no es raíz y no es débil, ES FUERTE (Verde)
-                // Esto se aplicará a Nivel 1, 2, 3... etc. de temas fuertes.
-                estiloBase = paleta.fuerte;
-            }
+            if (nivel === 0) estiloBase = paleta.raiz;
+            else if (esTemaDebil) estiloBase = paleta.debil;
+            else estiloBase = paleta.fuerte;
             
-            const estilo = {
-                background: '#FFFFFF',          // Fondo blanco para todos
-                border: estiloBase.border,      // Borde de color (corregido)
-                borderRadius: '16px',           // Esquinas redondeadas
+            return {
+                background: '#FFFFFF',
+                border: estiloBase.border,
+                borderRadius: '16px',
                 buttonBackground: estiloBase.button,
                 buttonColor: 'white'
             };
-
-            // Ya no se necesita un "override" porque la lógica principal lo maneja
-            
-            return estilo;
         }
-
-        // ============================================
-        // === FIN CÓDIGO D3 v8 (LAYOUT DE ÁRBOL) ===
-        // ============================================
     </script>
 </body>
 </html>

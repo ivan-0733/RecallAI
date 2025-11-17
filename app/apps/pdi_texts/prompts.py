@@ -324,9 +324,11 @@ REGLAS CRÍTICAS:
 
 3. **IDs únicos:** Usa formato: raiz, cat_1, cat_2, sub_1_1, sub_1_2, det_1_1_1, etc.
 
-4. **Texto (¡Importante!):** El límite de 50 caracteres YA NO APLICA. El texto ahora puede ser más largo (ej. 1-2 frases cortas) para ser más detallado, ya que el visualizador (el HTML) lo ajustará automáticamente.
-
-5. **Marcado de temas débiles:** Si el nodo trata un tema débil ({weak_topics_str}), agrega `"es_tema_debil": true`
+4. **Longitud del Texto (¡CRÍTICO - LÍMITE DE 10 PALABRAS!):** - Para los nodos de **Nivel 3** (los nodos finales de explicación/detalle): El texto DEBE tener un **máximo de 10 palabras**. Sé extremadamente conciso, directo y sintético.
+   - Para Niveles 0, 1 y 2: Mantén títulos cortos (3-5 palabras).
+   
+5. **Marcado de temas débiles (HERENCIA OBLIGATORIA):** - Si un nodo padre es un tema débil (`"es_tema_debil": true`), entonces **TODOS sus hijos y nietos DEBEN ser obligatoriamente temas débiles** (`"es_tema_debil": true`). 
+   - Es IMPOSIBLE que un detalle (hijo) sea "fuerte" (verde) si el concepto principal (padre) es "débil" (rojo). Revisa esta lógica antes de generar el JSON.
 
 6. **(MODIFICADO) Estructura de Ramas:** Ya NO se usa la proporción 75/25. La estructura debe basarse en los temas. Si hay 2 temas débiles y 1 de repaso, el Nivel 1 puede tener 3 nodos (2 rojos, 1 verde). La clave es que todas esas ramas deben desarrollarse en profundidad por igual.
 
@@ -474,7 +476,7 @@ CONTEXTO DEL ESTUDIANTE:
 - Temas para repaso: {review_topics_str}
 - Material de referencia: {text_content_preview[:500]}...
 
-IMPORTANTE: Responde ÚNICAMENTE con el JSON. No incluyas texto adicional, explicaciones ni markdown. El JSON debe ser válido y estar completo."""
+IMPORTANTE: Responde ÚNICAMENTE con el JSON. Revisa paso a paso la regla de HERENCIA de temas débiles antes de responder. No incluyas texto adicional, explicaciones ni markdown. El JSON debe ser válido y estar completo."""
 
 def get_mind_map_prompt(text_title, text_topic, weak_topics, review_topics, text_content_preview):
     """Prompt para Mapa Mental"""
