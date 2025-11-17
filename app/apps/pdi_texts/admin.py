@@ -3,8 +3,16 @@ from django.utils.html import format_html
 from django.urls import reverse, path
 from django.contrib import messages
 from django.http import JsonResponse
-from django.shortcuts import redirect
-from apps.pdi_texts.models import PDIText, InitialQuiz, QuizAttempt, UserProfile
+from django.shortcuts import redirect, render
+from django.db.models import Sum, Avg, Count, F, Q
+from django.utils import timezone
+from datetime import timedelta
+
+from apps.pdi_texts.models import (
+    PDIText, InitialQuiz, QuizAttempt, UserProfile,
+    UserDidacticMaterial, MaterialRequest, MaterialEffectiveness,
+    StudySession, InteractionEvent, SectionTimeTracking, HeatmapData
+)
 from apps.pdi_texts.tasks import generate_initial_quiz
 from apps.pdi_texts.utils import (
     extract_text_from_pdf, 
@@ -284,10 +292,10 @@ class PDITextAdmin(admin.ModelAdmin):
             buttons.append(
                 f'<a href="javascript:void(0);" onclick="generateQuiz({obj.pk}, \'{generate_url}\');" '
                 f'class="btn btn-sm btn-success" title="Generar Cuestionario" id="quiz-btn-{obj.pk}">'
-                '<i class="fas fa-plus-circle"></i> Generar Quiz</a>'  # ✅ CAMBIO AQUÍ: "Quiz" → "Generar Quiz"
+                '<i class="fas fa-plus-circle"></i> Generar Quiz</a>'
             )
         else:
-            # Si YA tiene quiz: Botón para VER (redirige al quiz) - NO TOCAR
+            # Si YA tiene quiz: Botón para VER (redirige al quiz)
             try:
                 quiz_url = reverse('admin:pdi_texts_initialquiz_change', args=[obj.initial_quiz.pk])
                 buttons.append(
@@ -606,33 +614,336 @@ class UserProfileAdmin(admin.ModelAdmin):
     total_study_time_display.short_description = 'Tiempo Total'
 
 
-# ========================================
-# ADMIN PARA TRACKING Y ANALYTICS
-# Agregar a app/apps/pdi_texts/admin.py
-# ========================================
+# ==========================================================================
+#  NUEVO: ADMIN CENTRALIZADO PARA MATERIAL DIDÁCTICO (TRACKING ACUMULADO)
+# ==========================================================================
 
-from django.contrib import admin
-from django.utils.html import format_html
-from django.urls import reverse, path
-from django.shortcuts import render
-from django.db.models import Sum, Avg, Count, F, Q
-from django.utils import timezone
-from datetime import timedelta
+@admin.register(UserDidacticMaterial)
+class UserDidacticMaterialAdmin(admin.ModelAdmin):
+    list_display = [
+        'material_type_badge',
+        'user_link',
+        'text_link',
+        'stats_summary_columns',
+        'created_at_formatted',
+        'was_effective_icon'
+    ]
+    
+    list_filter = ['material_type', 'was_effective', 'requested_at', 'text__title']
+    search_fields = ['user__email', 'text__title', 'weak_topics']
+    
+    # Acción para eliminar solo el material y no el intento de quiz
+    actions = ['delete_selected_materials_only']
+    
+    readonly_fields = [
+        'analytics_dashboard_panel', # <--- AQUÍ ESTÁ TU PANEL CENTRALIZADO
+        'html_content_preview',
+        'associated_quiz_link_detailed', # <--- Enlace detallado
+        'user',
+        'text',
+        'attempt'
+    ]
+    
+    fieldsets = (
+        ('📊 PANEL DE CONTROL & ANALÍTICA', {
+            'fields': ('analytics_dashboard_panel',),
+            'classes': ('wide',),
+            'description': 'Resumen total de actividad para este material específico.'
+        }),
+        ('👤 Contexto del Alumno', {
+            'fields': ('user', 'associated_quiz_link_detailed', 'text', 'weak_topics')
+        }),
+        ('📄 Contenido Generado', {
+            'fields': ('material_type', 'html_content_preview', 'generated_at'),
+            'classes': ('collapse',)
+        }),
+        ('⚙️ Metadatos Técnicos', {
+            'fields': ('generation_time_seconds', 'was_effective'),
+            'classes': ('collapse',)
+        })
+    )
 
-from apps.pdi_texts.models import (
-    StudySession,
-    InteractionEvent,
-    SectionTimeTracking,
-    HeatmapData
-)
+    # --- VISTAS PERSONALIZADAS EN COLUMNAS ---
 
+    def material_type_badge(self, obj):
+        icons = {
+            'flashcard': '📇',
+            'decision_tree': '🌳',
+            'mind_map': '🧠',
+            'summary': '📄'
+        }
+        return format_html(
+            '<span style="font-size: 1.1em;">{} {}</span>',
+            icons.get(obj.material_type, '📦'),
+            obj.get_material_type_display()
+        )
+    material_type_badge.short_description = "Material"
+
+    def user_link(self, obj):
+        url = reverse('admin:application_user_user_change', args=[obj.user.pk])
+        return format_html('<a href="{}">👤 {}</a>', url, obj.user.email.split('@')[0])
+    user_link.short_description = "Alumno"
+
+    def text_link(self, obj):
+        return obj.text.title[:20] + "..."
+    text_link.short_description = "Tema PDI"
+
+    def created_at_formatted(self, obj):
+        return obj.requested_at.strftime("%d/%m %H:%M")
+    created_at_formatted.short_description = "Creado"
+    
+    def was_effective_icon(self, obj):
+        if obj.was_effective is None: return "-"
+        return "✅" if obj.was_effective else "❌"
+    was_effective_icon.short_description = "Efectivo"
+
+    def stats_summary_columns(self, obj):
+        """Calcula y muestra totales rápidos en la lista principal"""
+        # Calcular totales sobre las sesiones hijas
+        sessions = obj.study_sessions.all()
+        count = sessions.count()
+        
+        # Agregar chequeo para evitar error si devuelve None
+        aggregates = sessions.aggregate(t=Sum('total_time_seconds'))
+        total_time = aggregates.get('t') or 0
+        
+        # FIX: Formatear el número a string ANTES de pasarlo a format_html para evitar ValueError
+        total_time_minutes = f"{total_time / 60:.1f}"
+        
+        return format_html(
+            '<div style="font-size: 0.9em;">'
+            '👁️ <b>{}</b> Sesiones<br>'
+            '⏱️ <b>{}m</b> Totales'
+            '</div>',
+            count,
+            total_time_minutes
+        )
+    stats_summary_columns.short_description = "Resumen Uso"
+
+    # --- PANEL CENTRALIZADO (DASHBOARD) ---
+
+    def analytics_dashboard_panel(self, obj):
+        """
+        Renderiza un dashboard HTML completo dentro del detalle del admin.
+        Calcula y reúne TODA la información de tracking de todas las sesiones.
+        """
+        # Obtener todas las sesiones asociadas
+        sessions = obj.study_sessions.all().order_by('-started_at')
+        total_sessions = sessions.count()
+        
+        # Calcular agregados (Totales)
+        aggregates = sessions.aggregate(
+            total_time=Sum('total_time_seconds'),
+            total_active=Sum('active_time_seconds'),
+            total_interactions=Sum('total_interactions'),
+            total_clicks=Sum('click_events'),
+            total_scrolls=Sum('scroll_events')
+        )
+        
+        # Usar 'or 0' para manejar casos donde la suma es None (sin sesiones)
+        total_time = aggregates['total_time'] or 0
+        total_active = aggregates['total_active'] or 0
+        total_interactions = aggregates['total_interactions'] or 0
+        total_clicks = aggregates['total_clicks'] or 0
+        total_scrolls = aggregates['total_scrolls'] or 0
+        
+        # Calcular promedios y porcentajes
+        avg_completion = 0
+        avg_engagement = 0
+        
+        if total_sessions > 0:
+            total_depth = sum((s.max_scroll_depth or 0) for s in sessions)
+            avg_completion = total_depth / total_sessions
+            
+            total_engagement = sum(s.engagement_score() for s in sessions)
+            avg_engagement = total_engagement / total_sessions
+        
+        # Colores para métricas
+        engagement_color = '#28a745' if avg_completion > 70 else '#ffc107'
+        score_color = '#28a745' if avg_engagement > 70 else '#ffc107' if avg_engagement > 40 else '#dc3545'
+        
+        html = f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                <div>
+                    <h2 style="margin:0; color: #333;">{obj.get_material_type_display()} de {obj.user.first_name} {obj.user.last_name}</h2>
+                    <p style="margin:5px 0 0 0; color: #555; font-weight:bold;">
+                        📚 Origen: {obj.text.title} (Quiz)
+                    </p>
+                    <p style="margin:0; color: #666; font-size: 0.9em;">
+                        Creado el {obj.requested_at.strftime('%d/%m/%Y a las %H:%M')} • Alumno: {obj.user.email}
+                    </p>
+                </div>
+                <div style="text-align: right;">
+                    <a href="{reverse('admin:pdi_texts_quizattempt_change', args=[obj.attempt.pk])}" class="button" style="background:#17a2b8;">
+                        Ver Quiz Origen (Score: {obj.attempt.score}%)
+                    </a>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 25px;">
+                <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: #007bff;">{total_sessions}</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Sesiones</div>
+                </div>
+                <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: #6610f2;">{int(total_time // 60)}m {int(total_time % 60)}s</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Tiempo Total</div>
+                    <small style="color: #999; font-size: 0.8em;">({int(total_active // 60)}m activos)</small>
+                </div>
+                <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: #fd7e14;">{total_interactions}</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Interacciones</div>
+                    <small style="color: #999; font-size: 0.7em;">({total_clicks} clics, {total_scrolls} scrolls)</small>
+                </div>
+                <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: {engagement_color};">{avg_completion:.1f}%</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Completitud Prom.</div>
+                </div>
+                <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: {score_color};">{avg_engagement:.1f}</div>
+                    <div style="color: #666; text-transform: uppercase; font-size: 0.7em;">Engagement Prom.</div>
+                </div>
+            </div>
+            
+            <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 25px; font-size: 0.9em; border-left: 5px solid #17a2b8;">
+                <h4 style="margin-top: 0; color: #0c5460;">ℹ️ Guía de Métricas</h4>
+                <ul style="margin-bottom: 0; padding-left: 20px;">
+                    <li style="margin-bottom: 8px;"><strong>Interacciones:</strong> Suma total de eventos activos del usuario sobre el material, incluyendo clics, scrolls, movimientos de mouse (hovers) y cambios de foco en la ventana.</li>
+                    <li style="margin-bottom: 8px;"><strong>Completado (100%):</strong> Se considera completado cuando se cumplen las siguientes reglas según el tipo de material:
+                        <ul style="margin-top: 5px;">
+                            <li><em>Resumen Estructurado:</em> El usuario ha llegado (scrolleado) hasta el final del texto generado.</li>
+                            <li><em>Mapas Conceptuales / Árboles:</em> El usuario ha expandido todos los nodos interactivos hasta el último nivel.</li>
+                            <li><em>Flashcards:</em> El usuario ha recorrido y volteado (flip) las 20 tarjetas del set.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Score de Engagement (0-100):</strong> Índice calculado combinando métricas ponderadas:
+                        <br><code>Score = (TiempoActivo/5min * 40) + (Interacciones/50 * 30) + (ProfundidadScroll * 0.2) + (Si Completó * 10)</code>
+                        <br><em>Nota: El tiempo activo se satura a los 5 minutos (300s) y las interacciones a 50 eventos.</em>
+                    </li>
+                </ul>
+            </div>
+
+            <h3 style="margin-bottom: 10px; color: #444;">Historial de Sesiones</h3>
+            <table style="width: 100%; border-collapse: collapse; background: white;">
+                <thead style="background: #e9ecef;">
+                    <tr>
+                        <th style="padding: 8px; text-align: left;">Fecha</th>
+                        <th style="padding: 8px; text-align: left;">Duración (Activo)</th>
+                        <th style="padding: 8px; text-align: center;">Interacciones</th>
+                        <th style="padding: 8px; text-align: center;">Completado</th>
+                        <th style="padding: 8px; text-align: center;">Engagement</th>
+                        <th style="padding: 8px; text-align: right;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
+        if sessions.exists():
+            for sess in sessions:
+                heatmap_link = ""
+                if sess.heatmap_data.exists():
+                    url = reverse('admin:pdi_texts_studysession_heatmap', args=[sess.pk])
+                    heatmap_link = f'<a href="{url}" target="_blank" title="Ver Mapa de Calor">🔥</a>'
+                
+                sess_link = reverse('admin:pdi_texts_studysession_change', args=[sess.pk])
+                
+                # Calcular engagement para esta sesión
+                sess_score = sess.engagement_score()
+                sess_score_color = '#28a745' if sess_score >= 70 else '#ffc107' if sess_score >= 40 else '#dc3545'
+                
+                # Asegurar valores para completitud
+                scroll_depth = sess.max_scroll_depth or 0
+                
+                html += f"""
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px;">{sess.started_at.strftime('%d/%m/%Y %H:%M')}</td>
+                        <td style="padding: 8px;">
+                            <b>{sess.duration_formatted()}</b> 
+                            <small class="text-muted">({int(sess.active_percentage())}% act)</small>
+                        </td>
+                        <td style="padding: 8px; text-align: center;">{sess.total_interactions}</td>
+                        <td style="padding: 8px; text-align: center;">
+                            <div style="background: #e9ecef; border-radius: 4px; height: 6px; width: 50px; display: inline-block; vertical-align: middle;">
+                                <div style="background: #28a745; height: 100%; border-radius: 4px; width: {scroll_depth}%;"></div>
+                            </div>
+                            <span style="font-size:0.8em; margin-left:5px;">{scroll_depth:.0f}%</span>
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <span style="color: {sess_score_color}; font-weight: bold;">{sess_score:.1f}</span>
+                        </td>
+                        <td style="padding: 8px; text-align: right;">
+                            {heatmap_link}
+                            <a href="{sess_link}" style="text-decoration: none;">🔍</a>
+                        </td>
+                    </tr>
+                """
+        else:
+            html += '<tr><td colspan="6" style="padding: 15px; text-align: center; color: #999;">El alumno aún no ha estudiado este material.</td></tr>'
+
+        html += """
+                </tbody>
+            </table>
+        </div>
+        """
+        return format_html(html)
+    
+    analytics_dashboard_panel.short_description = "Panel de Analítica"
+
+    # --- CAMPOS READONLY AUXILIARES ---
+
+    def associated_quiz_link_detailed(self, obj):
+        url = reverse('admin:pdi_texts_quizattempt_change', args=[obj.attempt.pk])
+        return format_html(
+            '<div>'
+            '<strong>Quiz Origen:</strong> {}<br>'
+            '<a href="{}" class="button" style="margin-top:5px;">📄 Ver Intento ({:.1f}%)</a>'
+            '</div>',
+            obj.text.title,
+            url, 
+            obj.attempt.score
+        )
+    associated_quiz_link_detailed.short_description = "Quiz Origen"
+
+    def html_content_preview(self, obj):
+        return format_html(
+            '<div style="border:1px solid #ccc; padding:10px; max-height:200px; overflow:auto;">{}</div>',
+            obj.html_content
+        )
+    html_content_preview.short_description = "Preview HTML"
+
+    # --- ACCIONES PERSONALIZADAS ---
+
+    def delete_selected_materials_only(self, request, queryset):
+        """
+        Elimina el material didáctico seleccionado PERO preserva el QuizAttempt.
+        """
+        count = queryset.count()
+        for material in queryset:
+            material.delete()
+        
+        self.message_user(request, f"✅ Se eliminaron {count} materiales didácticos. Los intentos de quiz (QuizAttempt) permanecen intactos.", messages.SUCCESS)
+    
+    delete_selected_materials_only.short_description = "🗑️ Eliminar SOLO Material Didáctico (Preservar Quiz)"
+
+
+# ==========================================================================
+#  ADMIN DE STUDY SESSION (OCULTO DEL MENU PERO ACCESIBLE)
+# ==========================================================================
 
 @admin.register(StudySession)
 class StudySessionAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        """
+        Ocultar del menú principal del admin (pero mantener URLs accesibles).
+        """
+        return {}
+
     list_display = [
         'session_id_short',
         'user_link',
-        'material_link',
+        'material_link',  # <--- Enlace corregido
         'started_at',
         'duration_badge',
         'engagement_badge',
@@ -754,6 +1065,7 @@ class StudySessionAdmin(admin.ModelAdmin):
     user_link.short_description = 'Usuario'
     
     def material_link(self, obj):
+        # Al haber registrado UserDidacticMaterialAdmin, este reverse ahora SÍ funciona
         url = reverse('admin:pdi_texts_userdidacticmaterial_change', args=[obj.material.pk])
         material_type_icon = {
             'flashcard': '📇',
@@ -842,20 +1154,23 @@ class StudySessionAdmin(admin.ModelAdmin):
         # Crear barra de progreso
         color = 'success' if score >= 70 else 'warning' if score >= 50 else 'danger'
         
+        # FIX: Convertir el número a string antes para evitar el error de format code
+        score_str = f"{score:.1f}"
+        
         return format_html(
             '''
             <div class="progress" style="height: 25px;">
                 <div class="progress-bar bg-{}" role="progressbar" 
                      style="width: {}%;" aria-valuenow="{}" 
                      aria-valuemin="0" aria-valuemax="100">
-                    <strong>{:.1f}%</strong>
+                    <strong>{}%</strong>
                 </div>
             </div>
             <small class="text-muted">
                 Basado en tiempo activo, interacciones, scroll depth y completitud
             </small>
             ''',
-            color, score, score, score
+            color, score, score, score_str
         )
     engagement_score_display.short_description = 'Score de Engagement'
     
@@ -1098,6 +1413,12 @@ class StudySessionAdmin(admin.ModelAdmin):
 
 @admin.register(InteractionEvent)
 class InteractionEventAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        """
+        Ocultar del menú principal del admin.
+        """
+        return {}
+
     list_display = [
         'event_type',
         'session_link',
@@ -1132,6 +1453,12 @@ class InteractionEventAdmin(admin.ModelAdmin):
 
 @admin.register(SectionTimeTracking)
 class SectionTimeTrackingAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        """
+        Ocultar del menú principal del admin.
+        """
+        return {}
+
     list_display = [
         'section_id',
         'section_type',
@@ -1165,6 +1492,12 @@ class SectionTimeTrackingAdmin(admin.ModelAdmin):
 
 @admin.register(HeatmapData)
 class HeatmapDataAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        """
+        Ocultar del menú principal del admin.
+        """
+        return {}
+
     list_display = [
         'session_link',
         'data_points_badge',

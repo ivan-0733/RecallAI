@@ -614,6 +614,37 @@ class UserDidacticMaterial(models.Model):
             models.Index(fields=['material_type']),
             models.Index(fields=['-requested_at']),
         ]
+
+    def get_aggregated_stats(self):
+        """
+        Calcula estadísticas totales acumulando todas las sesiones de estudio de este material.
+        """
+        sessions = self.study_sessions.all()
+        total_sessions = sessions.count()
+        
+        aggregates = sessions.aggregate(
+            total_time=Sum('total_time_seconds'),
+            total_active=Sum('active_time_seconds'),
+            total_interactions=Sum('total_interactions'),
+            total_clicks=Sum('click_events'),
+            total_scrolls=Sum('scroll_events')
+        )
+        
+        # Calcular completitud promedio
+        avg_completion = 0
+        if total_sessions > 0:
+            total_depth = sum(s.max_scroll_depth for s in sessions)
+            avg_completion = total_depth / total_sessions
+
+        return {
+            'sessions_count': total_sessions,
+            'total_time': aggregates['total_time'] or 0,
+            'total_active': aggregates['total_active'] or 0,
+            'total_interactions': aggregates['total_interactions'] or 0,
+            'total_clicks': aggregates['total_clicks'] or 0,
+            'total_scrolls': aggregates['total_scrolls'] or 0,
+            'avg_completion': avg_completion
+        }
     
     def __str__(self):
         return f"{self.user.email} - {self.material_type}"
