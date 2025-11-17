@@ -604,3 +604,597 @@ class UserProfileAdmin(admin.ModelAdmin):
         minutes = obj.total_study_time_minutes % 60
         return f"{hours}h {minutes}min"
     total_study_time_display.short_description = 'Tiempo Total'
+
+
+# ========================================
+# ADMIN PARA TRACKING Y ANALYTICS
+# Agregar a app/apps/pdi_texts/admin.py
+# ========================================
+
+from django.contrib import admin
+from django.utils.html import format_html
+from django.urls import reverse, path
+from django.shortcuts import render
+from django.db.models import Sum, Avg, Count, F, Q
+from django.utils import timezone
+from datetime import timedelta
+
+from apps.pdi_texts.models import (
+    StudySession,
+    InteractionEvent,
+    SectionTimeTracking,
+    HeatmapData
+)
+
+
+@admin.register(StudySession)
+class StudySessionAdmin(admin.ModelAdmin):
+    list_display = [
+        'session_id_short',
+        'user_link',
+        'material_link',
+        'started_at',
+        'duration_badge',
+        'engagement_badge',
+        'interactions_badge',
+        'completion_badge',
+        'actions_column'
+    ]
+    
+    list_filter = [
+        'is_active',
+        'completed',
+        'exit_type',
+        'device_type',
+        'browser',
+        'started_at'
+    ]
+    
+    search_fields = [
+        'user__email',
+        'material__text__title',
+        'session_id'
+    ]
+    
+    readonly_fields = [
+        'session_id',
+        'user',
+        'material',
+        'started_at',
+        'ended_at',
+        'engagement_score_display',
+        'activity_chart',
+        'sections_breakdown',
+        'heatmap_preview',
+        'event_timeline'
+    ]
+    
+    fieldsets = (
+        ('📊 Información de Sesión', {
+            'fields': (
+                'session_id',
+                'user',
+                'material',
+                'started_at',
+                'ended_at',
+                'is_active',
+                'completed'
+            )
+        }),
+        ('⏱️ Métricas de Tiempo', {
+            'fields': (
+                'total_time_seconds',
+                'active_time_seconds',
+                'idle_time_seconds',
+                'engagement_score_display'
+            )
+        }),
+        ('🖱️ Métricas de Interacción', {
+            'fields': (
+                'total_interactions',
+                'click_events',
+                'scroll_events',
+                'hover_events',
+                'focus_changes',
+                'max_scroll_depth'
+            )
+        }),
+        ('📱 Dispositivo', {
+            'fields': (
+                'device_type',
+                'browser',
+                'screen_resolution'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('📈 Análisis Detallado', {
+            'fields': (
+                'activity_chart',
+                'sections_breakdown',
+                'heatmap_preview',
+                'event_timeline'
+            ),
+            'classes': ('wide',)
+        })
+    )
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'analytics/',
+                self.admin_site.admin_view(self.analytics_dashboard_view),
+                name='pdi_texts_studysession_analytics',
+            ),
+            path(
+                '<int:session_id>/heatmap/',
+                self.admin_site.admin_view(self.heatmap_view),
+                name='pdi_texts_studysession_heatmap',
+            ),
+        ]
+        return custom_urls + urls
+    
+    # ============================================
+    # COLUMNAS DE DISPLAY
+    # ============================================
+    
+    def session_id_short(self, obj):
+        return format_html(
+            '<code style="font-size: 11px;">{}</code>',
+            str(obj.session_id)[:8]
+        )
+    session_id_short.short_description = 'ID'
+    
+    def user_link(self, obj):
+        url = reverse('admin:application_user_user_change', args=[obj.user.pk])
+        return format_html(
+            '<a href="{}">{}</a>',
+            url, obj.user.email
+        )
+    user_link.short_description = 'Usuario'
+    
+    def material_link(self, obj):
+        url = reverse('admin:pdi_texts_userdidacticmaterial_change', args=[obj.material.pk])
+        material_type_icon = {
+            'flashcard': '📇',
+            'decision_tree': '🌳',
+            'mind_map': '🧠',
+            'summary': '📄'
+        }.get(obj.material.material_type, '📚')
+        
+        return format_html(
+            '<a href="{}">{} {}</a>',
+            url,
+            material_type_icon,
+            obj.material.text.title[:30]
+        )
+    material_link.short_description = 'Material'
+    
+    def duration_badge(self, obj):
+        duration_formatted = obj.duration_formatted()
+        active_pct = obj.active_percentage()
+        
+        color = 'success' if active_pct >= 70 else 'warning' if active_pct >= 50 else 'danger'
+        
+        return format_html(
+            '<span class="badge badge-{}" title="{}% activo">{}</span>',
+            color,
+            round(active_pct, 1),
+            duration_formatted
+        )
+    duration_badge.short_description = 'Duración'
+    
+    def engagement_badge(self, obj):
+        score = obj.engagement_score()
+        
+        if score >= 80:
+            color = 'success'
+            icon = '🔥'
+        elif score >= 60:
+            color = 'info'
+            icon = '✅'
+        elif score >= 40:
+            color = 'warning'
+            icon = '⚠️'
+        else:
+            color = 'danger'
+            icon = '❌'
+        
+        return format_html(
+            '<span class="badge badge-{}" style="font-size: 14px;">{} {}</span>',
+            color, icon, round(score, 1)
+        )
+    engagement_badge.short_description = 'Engagement'
+    
+    def interactions_badge(self, obj):
+        return format_html(
+            '<span class="badge badge-primary">{}</span>',
+            obj.total_interactions
+        )
+    interactions_badge.short_description = 'Interacciones'
+    
+    def completion_badge(self, obj):
+        if obj.completed:
+            return format_html('<span class="badge badge-success">✓ Completó</span>')
+        else:
+            return format_html(
+                '<span class="badge badge-secondary">{:.0f}% leído</span>',
+                obj.max_scroll_depth
+            )
+    completion_badge.short_description = 'Completitud'
+    
+    def actions_column(self, obj):
+        heatmap_url = reverse('admin:pdi_texts_studysession_heatmap', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="btn btn-sm btn-info" target="_blank">'
+            '<i class="fas fa-fire"></i> Ver Heatmap</a>',
+            heatmap_url
+        )
+    actions_column.short_description = 'Acciones'
+    
+    # ============================================
+    # CAMPOS READONLY CON VISUALIZACIONES
+    # ============================================
+    
+    def engagement_score_display(self, obj):
+        score = obj.engagement_score()
+        
+        # Crear barra de progreso
+        color = 'success' if score >= 70 else 'warning' if score >= 50 else 'danger'
+        
+        return format_html(
+            '''
+            <div class="progress" style="height: 25px;">
+                <div class="progress-bar bg-{}" role="progressbar" 
+                     style="width: {}%;" aria-valuenow="{}" 
+                     aria-valuemin="0" aria-valuemax="100">
+                    <strong>{:.1f}%</strong>
+                </div>
+            </div>
+            <small class="text-muted">
+                Basado en tiempo activo, interacciones, scroll depth y completitud
+            </small>
+            ''',
+            color, score, score, score
+        )
+    engagement_score_display.short_description = 'Score de Engagement'
+    
+    def activity_chart(self, obj):
+        """Gráfico de actividad a lo largo de la sesión"""
+        events = obj.events.all().order_by('timestamp')
+        
+        if not events:
+            return format_html('<p class="text-muted">No hay eventos registrados</p>')
+        
+        # Agrupar eventos por minuto
+        event_counts_by_minute = {}
+        for event in events:
+            minute = int(event.time_since_session_start // 60)
+            event_counts_by_minute[minute] = event_counts_by_minute.get(minute, 0) + 1
+        
+        # Crear HTML para el gráfico simple
+        max_events = max(event_counts_by_minute.values()) if event_counts_by_minute else 1
+        
+        chart_html = '<div style="display: flex; align-items: flex-end; height: 200px; gap: 2px;">'
+        
+        for minute in range(max(event_counts_by_minute.keys()) + 1):
+            count = event_counts_by_minute.get(minute, 0)
+            height = (count / max_events) * 180
+            
+            color = '#28a745' if count > max_events * 0.7 else '#ffc107' if count > max_events * 0.4 else '#dc3545'
+            
+            chart_html += f'''
+                <div style="
+                    width: 10px;
+                    height: {height}px;
+                    background-color: {color};
+                    border-radius: 2px;
+                    position: relative;
+                " title="Minuto {minute}: {count} eventos"></div>
+            '''
+        
+        chart_html += '</div>'
+        chart_html += '<p class="text-muted mt-2"><small>Eventos por minuto durante la sesión</small></p>'
+        
+        return format_html(chart_html)
+    activity_chart.short_description = 'Gráfico de Actividad'
+    
+    def sections_breakdown(self, obj):
+        """Desglose de tiempo por sección"""
+        sections = obj.section_times.all().order_by('-total_time_seconds')[:10]
+        
+        if not sections:
+            return format_html('<p class="text-muted">No hay datos de secciones</p>')
+        
+        total_time = sum(s.total_time_seconds for s in sections)
+        
+        html = '<table class="table table-sm table-striped">'
+        html += '''
+            <thead>
+                <tr>
+                    <th>Sección</th>
+                    <th>Tipo</th>
+                    <th>Tiempo</th>
+                    <th>% Total</th>
+                    <th>Vistas</th>
+                </tr>
+            </thead>
+            <tbody>
+        '''
+        
+        for section in sections:
+            percentage = (section.total_time_seconds / total_time) * 100 if total_time > 0 else 0
+            
+            section_type_icon = {
+                'weak_section': '🔴',
+                'review_section': '🟢',
+                'flashcard': '📇',
+                'tree_node': '🌳',
+                'comparison_table': '📊'
+            }.get(section.section_type, '📄')
+            
+            html += f'''
+                <tr>
+                    <td><small>{section.section_id[:30]}</small></td>
+                    <td>{section_type_icon} {section.get_section_type_display()}</td>
+                    <td><strong>{section.total_time_seconds:.1f}s</strong></td>
+                    <td>
+                        <div class="progress" style="height: 15px; width: 60px;">
+                            <div class="progress-bar" style="width: {percentage}%"></div>
+                        </div>
+                    </td>
+                    <td><span class="badge badge-info">{section.view_count}</span></td>
+                </tr>
+            '''
+        
+        html += '</tbody></table>'
+        
+        return format_html(html)
+    sections_breakdown.short_description = 'Desglose por Sección'
+    
+    def heatmap_preview(self, obj):
+        """Preview del heatmap"""
+        heatmap = obj.heatmap_data.first()
+        
+        if not heatmap:
+            return format_html('<p class="text-muted">No hay datos de heatmap</p>')
+        
+        clicks_count = len(heatmap.clicks)
+        hot_zones_count = len(heatmap.hot_zones)
+        
+        html = f'''
+            <div class="card">
+                <div class="card-body">
+                    <h5>📍 {clicks_count} clics registrados</h5>
+                    <h5>🔥 {hot_zones_count} zonas calientes detectadas</h5>
+                    <a href="{reverse('admin:pdi_texts_studysession_heatmap', args=[obj.pk])}" 
+                       class="btn btn-primary btn-sm mt-2" target="_blank">
+                        Ver Heatmap Completo
+                    </a>
+                </div>
+            </div>
+        '''
+        
+        return format_html(html)
+    heatmap_preview.short_description = 'Heatmap'
+    
+    def event_timeline(self, obj):
+        """Timeline de eventos importantes"""
+        events = obj.events.filter(
+            event_type__in=['flashcard_flip', 'node_expand', 'copy_text', 'tab_hidden', 'tab_visible']
+        ).order_by('timestamp')[:50]
+        
+        if not events:
+            return format_html('<p class="text-muted">No hay eventos destacados</p>')
+        
+        html = '<div class="timeline" style="max-height: 400px; overflow-y: auto;">'
+        
+        for event in events:
+            icon = {
+                'flashcard_flip': '📇',
+                'node_expand': '🌳',
+                'copy_text': '📋',
+                'tab_hidden': '👁️',
+                'tab_visible': '👀'
+            }.get(event.event_type, '•')
+            
+            html += f'''
+                <div class="mb-2 p-2" style="border-left: 3px solid #007bff;">
+                    <strong>{icon} {event.get_event_type_display()}</strong>
+                    <span class="text-muted"> @ {event.time_since_session_start:.0f}s</span>
+                    <br>
+                    <small>{event.element_text[:100] if event.element_text else ''}</small>
+                </div>
+            '''
+        
+        html += '</div>'
+        
+        return format_html(html)
+    event_timeline.short_description = 'Timeline de Eventos'
+    
+    # ============================================
+    # VISTAS PERSONALIZADAS
+    # ============================================
+    
+    def analytics_dashboard_view(self, request):
+        """Dashboard general de analytics"""
+        
+        # Filtros de tiempo
+        today = timezone.now().date()
+        week_ago = today - timedelta(days=7)
+        month_ago = today - timedelta(days=30)
+        
+        # Sesiones totales
+        total_sessions = StudySession.objects.filter(is_active=False).count()
+        sessions_this_week = StudySession.objects.filter(
+            started_at__gte=week_ago,
+            is_active=False
+        ).count()
+        
+        # Tiempo total de estudio
+        total_study_time = StudySession.objects.filter(
+            is_active=False
+        ).aggregate(total=Sum('total_time_seconds'))['total'] or 0
+        
+        # Promedio de engagement
+        avg_engagement = StudySession.objects.filter(
+            is_active=False,
+            total_time_seconds__gt=0
+        ).aggregate(
+            avg=Avg(F('active_time_seconds') * 100.0 / F('total_time_seconds'))
+        )['avg'] or 0
+        
+        # Top usuarios más activos
+        top_users = StudySession.objects.filter(
+            is_active=False
+        ).values(
+            'user__email',
+            'user__first_name',
+            'user__last_name'
+        ).annotate(
+            total_sessions=Count('id'),
+            total_time=Sum('total_time_seconds'),
+            avg_engagement=Avg(F('active_time_seconds') * 100.0 / F('total_time_seconds'))
+        ).order_by('-total_time')[:10]
+        
+        # Materiales más estudiados
+        top_materials = StudySession.objects.filter(
+            is_active=False
+        ).values(
+            'material__text__title',
+            'material__material_type'
+        ).annotate(
+            total_sessions=Count('id'),
+            avg_completion=Avg('max_scroll_depth')
+        ).order_by('-total_sessions')[:10]
+        
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Analytics Dashboard',
+            'total_sessions': total_sessions,
+            'sessions_this_week': sessions_this_week,
+            'total_study_time_hours': round(total_study_time / 3600, 2),
+            'avg_engagement': round(avg_engagement, 2),
+            'top_users': top_users,
+            'top_materials': top_materials
+        }
+        
+        return render(request, 'admin/tracking/analytics_dashboard.html', context)
+    
+    def heatmap_view(self, request, session_id):
+        """Vista del heatmap interactivo"""
+        session = StudySession.objects.get(pk=session_id)
+        heatmap = session.heatmap_data.first()
+        
+        context = {
+            **self.admin_site.each_context(request),
+            'title': f'Heatmap - Sesión {str(session.session_id)[:8]}',
+            'session': session,
+            'heatmap': heatmap
+        }
+        
+        return render(request, 'admin/tracking/heatmap_view.html', context)
+
+
+@admin.register(InteractionEvent)
+class InteractionEventAdmin(admin.ModelAdmin):
+    list_display = [
+        'event_type',
+        'session_link',
+        'time_display',
+        'element_preview',
+        'timestamp'
+    ]
+    
+    list_filter = ['event_type', 'timestamp']
+    search_fields = ['session__session_id', 'element_text']
+    readonly_fields = ['session', 'event_type', 'timestamp', 'metadata']
+    
+    def session_link(self, obj):
+        url = reverse('admin:pdi_texts_studysession_change', args=[obj.session.pk])
+        return format_html(
+            '<a href="{}">Sesión {}</a>',
+            url,
+            str(obj.session.session_id)[:8]
+        )
+    session_link.short_description = 'Sesión'
+    
+    def time_display(self, obj):
+        return f"{obj.time_since_session_start:.1f}s"
+    time_display.short_description = 'Tiempo'
+    
+    def element_preview(self, obj):
+        if obj.element_text:
+            return obj.element_text[:50] + '...' if len(obj.element_text) > 50 else obj.element_text
+        return '-'
+    element_preview.short_description = 'Elemento'
+
+
+@admin.register(SectionTimeTracking)
+class SectionTimeTrackingAdmin(admin.ModelAdmin):
+    list_display = [
+        'section_id',
+        'section_type',
+        'session_link',
+        'time_display',
+        'view_count',
+        'fully_read_badge'
+    ]
+    
+    list_filter = ['section_type', 'fully_read']
+    search_fields = ['section_id', 'section_content_preview']
+    
+    def session_link(self, obj):
+        url = reverse('admin:pdi_texts_studysession_change', args=[obj.session.pk])
+        return format_html(
+            '<a href="{}">Ver Sesión</a>',
+            url
+        )
+    session_link.short_description = 'Sesión'
+    
+    def time_display(self, obj):
+        return f"{obj.total_time_seconds:.1f}s"
+    time_display.short_description = 'Tiempo'
+    
+    def fully_read_badge(self, obj):
+        if obj.fully_read:
+            return format_html('<span class="badge badge-success">✓</span>')
+        return format_html('<span class="badge badge-secondary">-</span>')
+    fully_read_badge.short_description = 'Leído'
+
+
+@admin.register(HeatmapData)
+class HeatmapDataAdmin(admin.ModelAdmin):
+    list_display = [
+        'session_link',
+        'data_points_badge',
+        'clicks_count',
+        'hot_zones_count',
+        'captured_at'
+    ]
+    
+    readonly_fields = ['session', 'clicks', 'mouse_movements', 'scroll_points', 'hot_zones']
+    
+    def session_link(self, obj):
+        url = reverse('admin:pdi_texts_studysession_change', args=[obj.session.pk])
+        return format_html(
+            '<a href="{}">Sesión {}</a>',
+            url,
+            str(obj.session.session_id)[:8]
+        )
+    session_link.short_description = 'Sesión'
+    
+    def data_points_badge(self, obj):
+        return format_html(
+            '<span class="badge badge-info">{}</span>',
+            obj.data_points_count
+        )
+    data_points_badge.short_description = 'Puntos de Datos'
+    
+    def clicks_count(self, obj):
+        return len(obj.clicks)
+    clicks_count.short_description = 'Clics'
+    
+    def hot_zones_count(self, obj):
+        return len(obj.hot_zones)
+    hot_zones_count.short_description = 'Zonas Calientes'

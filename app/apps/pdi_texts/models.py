@@ -617,3 +617,537 @@ class UserDidacticMaterial(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.material_type}"
+    
+# ============================================
+# MODELOS DE TRACKING DETALLADO
+# Agregar al final de app/apps/pdi_texts/models.py
+# ============================================
+
+import uuid
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class StudySession(models.Model):
+    """
+    Sesión de estudio completa - captura TODO lo que hace el usuario
+    mientras estudia un material didáctico
+    """
+    
+    EXIT_TYPES = [
+        ('normal', 'Salida Normal'),
+        ('timeout', 'Timeout por Inactividad'),
+        ('browser_close', 'Cerró Navegador'),
+        ('navigation', 'Navegó a otra página'),
+    ]
+    
+    # Identificación
+    session_id = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        verbose_name="ID de Sesión"
+    )
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='study_sessions',
+        verbose_name="Usuario"
+    )
+    
+    material = models.ForeignKey(
+        'UserDidacticMaterial',
+        on_delete=models.CASCADE,
+        related_name='study_sessions',
+        verbose_name="Material"
+    )
+    
+    # Tiempos
+    started_at = models.DateTimeField(
+        verbose_name="Inicio"
+    )
+    
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fin"
+    )
+    
+    total_time_seconds = models.IntegerField(
+        default=0,
+        verbose_name="Tiempo Total (segundos)"
+    )
+    
+    active_time_seconds = models.IntegerField(
+        default=0,
+        verbose_name="Tiempo Activo (segundos)",
+        help_text="Tiempo real de interacción (sin idle)"
+    )
+    
+    idle_time_seconds = models.IntegerField(
+        default=0,
+        verbose_name="Tiempo Inactivo (segundos)"
+    )
+    
+    # Métricas de actividad
+    total_interactions = models.IntegerField(
+        default=0,
+        verbose_name="Total de Interacciones"
+    )
+    
+    scroll_events = models.IntegerField(
+        default=0,
+        verbose_name="Eventos de Scroll"
+    )
+    
+    click_events = models.IntegerField(
+        default=0,
+        verbose_name="Eventos de Click"
+    )
+    
+    hover_events = models.IntegerField(
+        default=0,
+        verbose_name="Eventos de Hover"
+    )
+    
+    focus_changes = models.IntegerField(
+        default=0,
+        verbose_name="Cambios de Foco"
+    )
+    
+    # Métricas de contenido
+    sections_visited = models.JSONField(
+        default=list,
+        verbose_name="Secciones Visitadas"
+    )
+    
+    max_scroll_depth = models.FloatField(
+        default=0,
+        verbose_name="Profundidad Máxima de Scroll (%)"
+    )
+    
+    revisits_count = models.IntegerField(
+        default=0,
+        verbose_name="Número de Revisitas"
+    )
+    
+    # Estado
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Sesión Activa"
+    )
+    
+    completed = models.BooleanField(
+        default=False,
+        verbose_name="Completó el Material"
+    )
+    
+    exit_type = models.CharField(
+        max_length=20,
+        choices=EXIT_TYPES,
+        null=True,
+        blank=True,
+        verbose_name="Tipo de Salida"
+    )
+    
+    # Metadata del dispositivo
+    device_type = models.CharField(
+        max_length=20,
+        null=True,
+        verbose_name="Tipo de Dispositivo"
+    )
+    
+    browser = models.CharField(
+        max_length=50,
+        null=True,
+        verbose_name="Navegador"
+    )
+    
+    screen_resolution = models.CharField(
+        max_length=20,
+        null=True,
+        verbose_name="Resolución"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de Creación"
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última Actualización"
+    )
+    
+    class Meta:
+        db_table = 'study_session'
+        verbose_name = 'Sesión de Estudio'
+        verbose_name_plural = 'Sesiones de Estudio'
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['user', '-started_at']),
+            models.Index(fields=['material', '-started_at']),
+            models.Index(fields=['session_id']),
+            models.Index(fields=['is_active']),
+        ]
+    
+    def __str__(self):
+        return f"Sesión {self.session_id} - {self.user.email}"
+    
+    def duration_formatted(self):
+        """Retorna duración en formato HH:MM:SS"""
+        hours = self.total_time_seconds // 3600
+        minutes = (self.total_time_seconds % 3600) // 60
+        seconds = self.total_time_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    
+    def active_percentage(self):
+        """Porcentaje de tiempo activo vs total"""
+        if self.total_time_seconds == 0:
+            return 0
+        return (self.active_time_seconds / self.total_time_seconds) * 100
+    
+    def engagement_score(self):
+        """
+        Calcula un score de engagement (0-100) basado en:
+        - Tiempo activo
+        - Número de interacciones
+        - Profundidad de scroll
+        - Completitud
+        """
+        score = 0
+        
+        # 40 puntos por tiempo activo (mínimo 5 minutos = 100%)
+        if self.active_time_seconds >= 300:
+            score += 40
+        else:
+            score += (self.active_time_seconds / 300) * 40
+        
+        # 30 puntos por interacciones (mínimo 50 = 100%)
+        if self.total_interactions >= 50:
+            score += 30
+        else:
+            score += (self.total_interactions / 50) * 30
+        
+        # 20 puntos por scroll depth
+        score += (self.max_scroll_depth / 100) * 20
+        
+        # 10 puntos si completó
+        if self.completed:
+            score += 10
+        
+        return min(100, round(score, 2))
+
+
+class InteractionEvent(models.Model):
+    """
+    Evento granular de interacción - cada click, scroll, hover, etc.
+    """
+    
+    EVENT_TYPES = [
+        ('click', 'Click'),
+        ('scroll', 'Scroll'),
+        ('hover', 'Hover'),
+        ('focus', 'Cambio de Foco'),
+        ('flashcard_flip', 'Voltear Flashcard'),
+        ('node_expand', 'Expandir Nodo'),
+        ('node_collapse', 'Colapsar Nodo'),
+        ('section_view', 'Ver Sección'),
+        ('copy_text', 'Copiar Texto'),
+        ('tab_visible', 'Tab Visible'),
+        ('tab_hidden', 'Tab Oculta'),
+        ('resume_study', 'Reanudar Estudio'),
+        ('pause_study', 'Pausar Estudio'),
+    ]
+    
+    session = models.ForeignKey(
+        StudySession,
+        on_delete=models.CASCADE,
+        related_name='events',
+        verbose_name="Sesión"
+    )
+    
+    event_type = models.CharField(
+        max_length=30,
+        choices=EVENT_TYPES,
+        verbose_name="Tipo de Evento"
+    )
+    
+    # Datos del evento
+    element_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="ID del Elemento"
+    )
+    
+    element_type = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        verbose_name="Tipo de Elemento"
+    )
+    
+    element_text = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name="Texto del Elemento"
+    )
+    
+    # Posición
+    x_position = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Posición X"
+    )
+    
+    y_position = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Posición Y"
+    )
+    
+    scroll_position = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Posición de Scroll"
+    )
+    
+    viewport_height = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Alto del Viewport"
+    )
+    
+    # Timing
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Timestamp"
+    )
+    
+    time_since_session_start = models.FloatField(
+        verbose_name="Tiempo desde Inicio (segundos)"
+    )
+    
+    # Contexto adicional
+    metadata = models.JSONField(
+        default=dict,
+        verbose_name="Metadata Adicional"
+    )
+    
+    class Meta:
+        db_table = 'interaction_event'
+        verbose_name = 'Evento de Interacción'
+        verbose_name_plural = 'Eventos de Interacción'
+        ordering = ['timestamp']
+        indexes = [
+            models.Index(fields=['session', 'timestamp']),
+            models.Index(fields=['event_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.event_type} @ {self.time_since_session_start:.1f}s"
+
+
+class SectionTimeTracking(models.Model):
+    """
+    Tracking de tiempo por sección específica del material
+    """
+    
+    SECTION_TYPES = [
+        ('weak_section', 'Sección de Temas Débiles'),
+        ('review_section', 'Sección de Repaso'),
+        ('flashcard', 'Flashcard'),
+        ('tree_node', 'Nodo del Árbol'),
+        ('summary_block', 'Bloque de Resumen'),
+        ('comparison_table', 'Tabla Comparativa'),
+        ('code_block', 'Bloque de Código'),
+    ]
+    
+    session = models.ForeignKey(
+        StudySession,
+        on_delete=models.CASCADE,
+        related_name='section_times',
+        verbose_name="Sesión"
+    )
+    
+    # Identificación de sección
+    section_id = models.CharField(
+        max_length=255,
+        verbose_name="ID de Sección"
+    )
+    
+    section_type = models.CharField(
+        max_length=50,
+        choices=SECTION_TYPES,
+        verbose_name="Tipo de Sección"
+    )
+    
+    section_content_preview = models.TextField(
+        max_length=500,
+        verbose_name="Preview del Contenido"
+    )
+    
+    # Métricas de tiempo
+    first_view_at = models.DateTimeField(
+        verbose_name="Primera Vista"
+    )
+    
+    last_view_at = models.DateTimeField(
+        verbose_name="Última Vista"
+    )
+    
+    total_time_seconds = models.FloatField(
+        default=0,
+        verbose_name="Tiempo Total (segundos)"
+    )
+    
+    view_count = models.IntegerField(
+        default=0,
+        verbose_name="Número de Vistas"
+    )
+    
+    # Interacciones específicas
+    interaction_count = models.IntegerField(
+        default=0,
+        verbose_name="Interacciones en Sección"
+    )
+    
+    scroll_depth_percent = models.FloatField(
+        default=0,
+        verbose_name="Profundidad de Scroll (%)"
+    )
+    
+    # Flags
+    fully_read = models.BooleanField(
+        default=False,
+        verbose_name="Leído Completamente"
+    )
+    
+    interacted_with = models.BooleanField(
+        default=False,
+        verbose_name="Interactuó con la Sección"
+    )
+    
+    class Meta:
+        db_table = 'section_time_tracking'
+        verbose_name = 'Tracking de Tiempo por Sección'
+        verbose_name_plural = 'Tracking de Tiempo por Sección'
+        ordering = ['-total_time_seconds']
+        indexes = [
+            models.Index(fields=['session', 'section_id']),
+            models.Index(fields=['section_type']),
+        ]
+        unique_together = ['session', 'section_id']
+    
+    def __str__(self):
+        return f"{self.section_id} - {self.total_time_seconds:.1f}s"
+
+
+class HeatmapData(models.Model):
+    """
+    Datos para generar heatmaps de interacción
+    """
+    
+    session = models.ForeignKey(
+        StudySession,
+        on_delete=models.CASCADE,
+        related_name='heatmap_data',
+        verbose_name="Sesión"
+    )
+    
+    # Datos de clics (array de objetos)
+    clicks = models.JSONField(
+        default=list,
+        verbose_name="Clics",
+        help_text="Array de {x, y, timestamp}"
+    )
+    
+    # Datos de movimiento del mouse (sample cada 100ms)
+    mouse_movements = models.JSONField(
+        default=list,
+        verbose_name="Movimientos del Mouse",
+        help_text="Array de {x, y, timestamp}"
+    )
+    
+    # Datos de scroll
+    scroll_points = models.JSONField(
+        default=list,
+        verbose_name="Puntos de Scroll",
+        help_text="Array de {position, timestamp}"
+    )
+    
+    # Zonas calientes (calculadas en backend)
+    hot_zones = models.JSONField(
+        default=list,
+        verbose_name="Zonas Calientes",
+        help_text="Áreas con más actividad: [{x, y, width, height, intensity}]"
+    )
+    
+    # Metadata
+    captured_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Capturado"
+    )
+    
+    data_points_count = models.IntegerField(
+        default=0,
+        verbose_name="Número de Puntos de Datos"
+    )
+    
+    class Meta:
+        db_table = 'heatmap_data'
+        verbose_name = 'Datos de Heatmap'
+        verbose_name_plural = 'Datos de Heatmap'
+        ordering = ['-captured_at']
+    
+    def __str__(self):
+        return f"Heatmap - Sesión {self.session.session_id} - {self.data_points_count} puntos"
+    
+    def calculate_hot_zones(self, grid_size=50):
+        """
+        Calcula zonas calientes basadas en densidad de clics
+        Divide la pantalla en una grid y calcula intensidad por celda
+        """
+        if not self.clicks:
+            return []
+        
+        # Obtener dimensiones de la pantalla
+        max_x = max(c['x'] for c in self.clicks)
+        max_y = max(c['y'] for c in self.clicks)
+        
+        # Crear grid
+        grid = {}
+        for click in self.clicks:
+            grid_x = int(click['x'] // grid_size)
+            grid_y = int(click['y'] // grid_size)
+            key = f"{grid_x},{grid_y}"
+            
+            if key not in grid:
+                grid[key] = {
+                    'x': grid_x * grid_size,
+                    'y': grid_y * grid_size,
+                    'width': grid_size,
+                    'height': grid_size,
+                    'count': 0
+                }
+            grid[key]['count'] += 1
+        
+        # Calcular intensidad normalizada (0-100)
+        max_count = max(zone['count'] for zone in grid.values())
+        hot_zones = []
+        
+        for zone in grid.values():
+            intensity = (zone['count'] / max_count) * 100
+            if intensity >= 20:  # Solo guardar zonas con >20% intensidad
+                hot_zones.append({
+                    'x': zone['x'],
+                    'y': zone['y'],
+                    'width': zone['width'],
+                    'height': zone['height'],
+                    'intensity': round(intensity, 2)
+                })
+        
+        return sorted(hot_zones, key=lambda z: z['intensity'], reverse=True)

@@ -540,3 +540,459 @@ class UserDidacticMaterialViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Solo materiales del usuario actual"""
         return UserDidacticMaterial.objects.filter(user=self.request.user)
+    
+
+# ========================================
+# VISTAS PARA TRACKING
+# Agregar a app/apps/pdi_texts/views.py
+# ========================================
+
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.db.models import Sum, Avg, Count, F
+from datetime import timedelta
+
+from apps.pdi_texts.models import (
+    StudySession,
+    InteractionEvent,
+    SectionTimeTracking,
+    HeatmapData,
+    UserDidacticMaterial
+)
+
+
+class TrackingViewSet(viewsets.ViewSet):
+    """
+    ViewSet para gestionar el tracking de estudio
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['post'], url_path='session/start')
+    def start_session(self, request):
+        """
+        Inicia una nueva sesión de estudio
+        POST /api/tracking/session/start/
+        
+        Body:
+        {
+            "session_id": "uuid",
+            "material_id": 123,
+            "device_type": "desktop",
+            "browser": "Chrome",
+            "screen_resolution": "1920x1080",
+            "started_at": "2025-01-01T10:00:00Z"
+        }
+        """
+        data = request.data
+        
+        try:
+            material = UserDidacticMaterial.objects.get(
+                id=data['material_id'],
+                user=request.user
+            )
+            
+            session = StudySession.objects.create(
+                session_id=data['session_id'],
+                user=request.user,
+                material=material,
+                device_type=data.get('device_type'),
+                browser=data.get('browser'),
+                screen_resolution=data.get('screen_resolution'),
+                started_at=timezone.now()
+            )
+            
+            return Response({
+                'status': 'success',
+                'session_id': str(session.session_id),
+                'message': 'Sesión iniciada correctamente'
+            }, status=status.HTTP_201_CREATED)
+            
+        except UserDidacticMaterial.DoesNotExist:
+            return Response({
+                'error': 'Material no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], url_path='session/sync')
+    def sync_session(self, request):
+        """
+        Sincroniza datos de la sesión activa
+        POST /api/tracking/session/sync/
+        
+        Body:
+        {
+            "session_id": "uuid",
+            "events": [...],
+            "section_times": [...],
+            "heatmap_data": {...},
+            "metrics": {...}
+        }
+        """
+        data = request.data
+        session_id = data.get('session_id')
+        
+        try:
+            session = StudySession.objects.get(
+                session_id=session_id,
+                user=request.user,
+                is_active=True
+            )
+            
+            # 1. Guardar eventos
+            events_data = data.get('events', [])
+            events_to_create = []
+            
+            for event_data in events_data:
+                events_to_create.append(InteractionEvent(
+                    session=session,
+                    event_type=event_data.get('event_type'),
+                    element_id=event_data.get('element_id'),
+                    element_type=event_data.get('element_type'),
+                    element_text=event_data.get('element_text', '')[:500],  # Truncar
+                    x_position=event_data.get('x_position'),
+                    y_position=event_data.get('y_position'),
+                    scroll_position=event_data.get('scroll_position'),
+                    viewport_height=event_data.get('viewport_height'),
+                    time_since_session_start=event_data.get('time_since_session_start'),
+                    metadata=event_data.get('metadata', {})
+                ))
+            
+            if events_to_create:
+                InteractionEvent.objects.bulk_create(events_to_create)
+            
+            # 2. Actualizar o crear section times
+            section_times_data = data.get('section_times', [])
+            
+            for section_data in section_times_data:
+                section, created = SectionTimeTracking.objects.get_or_create(
+                    session=session,
+                    section_id=section_data['section_id'],
+                    defaults={
+                        'section_type': section_data.get('section_type', 'unknown'),
+                        'section_content_preview': section_data.get('section_content_preview', '')[:500],
+                        'first_view_at': timezone.now(),
+                        'last_view_at': timezone.now()
+                    }
+                )
+                
+                if not created:
+                    # Actualizar tiempos
+                    section.total_time_seconds += section_data.get('total_time_seconds', 0)
+                    section.view_count += section_data.get('view_count', 1)
+                    section.last_view_at = timezone.now()
+                    section.save()
+            
+            # 3. Guardar o actualizar heatmap data
+            heatmap_data = data.get('heatmap_data', {})
+            if heatmap_data:
+                heatmap, created = HeatmapData.objects.get_or_create(
+                    session=session,
+                    defaults={
+                        'clicks': heatmap_data.get('clicks', []),
+                        'mouse_movements': heatmap_data.get('mouse_movements', []),
+                        'scroll_points': heatmap_data.get('scroll_points', [])
+                    }
+                )
+                
+                if not created:
+                    # Agregar nuevos datos
+                    heatmap.clicks.extend(heatmap_data.get('clicks', []))
+                    heatmap.mouse_movements.extend(heatmap_data.get('mouse_movements', []))
+                    heatmap.scroll_points.extend(heatmap_data.get('scroll_points', []))
+                    heatmap.data_points_count = len(heatmap.clicks) + len(heatmap.mouse_movements)
+                    
+                    # Calcular hot zones
+                    heatmap.hot_zones = heatmap.calculate_hot_zones()
+                    heatmap.save()
+            
+            # 4. Actualizar métricas de sesión
+            metrics = data.get('metrics', {})
+            if metrics:
+                session.total_interactions = metrics.get('total_interactions', 0)
+                session.scroll_events = metrics.get('scroll_events', 0)
+                session.click_events = metrics.get('click_events', 0)
+                session.hover_events = metrics.get('hover_events', 0)
+                session.focus_changes = metrics.get('focus_changes', 0)
+                session.sections_visited = metrics.get('sections_visited', [])
+                session.max_scroll_depth = metrics.get('max_scroll_depth', 0)
+                session.save()
+            
+            return Response({
+                'status': 'success',
+                'synced_events': len(events_data),
+                'synced_sections': len(section_times_data)
+            })
+            
+        except StudySession.DoesNotExist:
+            return Response({
+                'error': 'Sesión no encontrada o inactiva'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], url_path='session/end')
+    def end_session(self, request):
+        """
+        Finaliza una sesión de estudio
+        POST /api/tracking/session/end/
+        
+        Body:
+        {
+            "session_id": "uuid",
+            "ended_at": "2025-01-01T10:30:00Z",
+            "total_time_seconds": 1800,
+            "active_time_seconds": 1500,
+            "exit_type": "normal",
+            "metrics": {...}
+        }
+        """
+        data = request.data
+        session_id = data.get('session_id')
+        
+        try:
+            session = StudySession.objects.get(
+                session_id=session_id,
+                user=request.user
+            )
+            
+            # Actualizar sesión
+            session.ended_at = timezone.now()
+            session.total_time_seconds = data.get('total_time_seconds', 0)
+            session.active_time_seconds = data.get('active_time_seconds', 0)
+            session.idle_time_seconds = session.total_time_seconds - session.active_time_seconds
+            session.exit_type = data.get('exit_type', 'normal')
+            session.is_active = False
+            
+            # Métricas finales
+            metrics = data.get('metrics', {})
+            if metrics:
+                session.total_interactions = metrics.get('total_interactions', 0)
+                session.max_scroll_depth = metrics.get('max_scroll_depth', 0)
+            
+            # Determinar si completó el material
+            session.completed = session.max_scroll_depth >= 90
+            
+            session.save()
+            
+            # Actualizar estadísticas del material
+            material = session.material
+            material.total_study_time_seconds += session.total_time_seconds
+            material.active_study_time_seconds += session.active_time_seconds
+            material.total_interactions += session.total_interactions
+            material.sessions_count += 1
+            material.last_studied_at = timezone.now()
+            material.completion_percentage = session.max_scroll_depth
+            
+            # Calcular engagement score
+            material.engagement_score = session.engagement_score()
+            material.save()
+            
+            return Response({
+                'status': 'success',
+                'session_summary': {
+                    'duration_seconds': session.total_time_seconds,
+                    'active_time_seconds': session.active_time_seconds,
+                    'active_percentage': session.active_percentage(),
+                    'engagement_score': session.engagement_score(),
+                    'interactions': session.total_interactions,
+                    'scroll_depth': session.max_scroll_depth,
+                    'completed': session.completed
+                }
+            })
+            
+        except StudySession.DoesNotExist:
+            return Response({
+                'error': 'Sesión no encontrada'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'], url_path='session/(?P<session_id>[^/.]+)')
+    def get_session_details(self, request, session_id=None):
+        """
+        Obtiene detalles completos de una sesión
+        GET /api/tracking/session/{session_id}/
+        """
+        try:
+            session = StudySession.objects.get(
+                session_id=session_id,
+                user=request.user
+            )
+            
+            # Obtener eventos de la sesión
+            events = session.events.all().order_by('timestamp')
+            event_timeline = [
+                {
+                    'type': e.event_type,
+                    'time': e.time_since_session_start,
+                    'element': e.element_text[:50] if e.element_text else None
+                }
+                for e in events[:100]  # Limitar a 100 eventos
+            ]
+            
+            # Obtener section times
+            section_times = session.section_times.all().order_by('-total_time_seconds')
+            sections_summary = [
+                {
+                    'section_id': s.section_id,
+                    'type': s.section_type,
+                    'time_seconds': round(s.total_time_seconds, 2),
+                    'views': s.view_count
+                }
+                for s in section_times
+            ]
+            
+            # Obtener heatmap
+            heatmap = session.heatmap_data.first()
+            hot_zones = heatmap.hot_zones if heatmap else []
+            
+            return Response({
+                'session_id': str(session.session_id),
+                'material_title': session.material.text.title,
+                'started_at': session.started_at,
+                'ended_at': session.ended_at,
+                'duration_formatted': session.duration_formatted(),
+                'active_percentage': round(session.active_percentage(), 2),
+                'engagement_score': session.engagement_score(),
+                'metrics': {
+                    'interactions': session.total_interactions,
+                    'clicks': session.click_events,
+                    'scrolls': session.scroll_events,
+                    'hovers': session.hover_events,
+                    'max_scroll_depth': session.max_scroll_depth,
+                    'sections_visited': len(session.sections_visited)
+                },
+                'event_timeline': event_timeline,
+                'sections_summary': sections_summary,
+                'hot_zones': hot_zones[:10]  # Top 10 zonas calientes
+            })
+            
+        except StudySession.DoesNotExist:
+            return Response({
+                'error': 'Sesión no encontrada'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+class AnalyticsViewSet(viewsets.ViewSet):
+    """
+    ViewSet para analytics y estadísticas del admin
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['get'], url_path='user/(?P<user_id>[^/.]+)')
+    def user_analytics(self, request, user_id=None):
+        """
+        Analytics completos de un usuario
+        GET /api/analytics/user/{user_id}/
+        """
+        from apps.application_user.models import User
+        
+        try:
+            user = User.objects.get(id=user_id)
+            
+            # Sesiones del usuario
+            sessions = StudySession.objects.filter(user=user, is_active=False)
+            
+            # Métricas generales
+            total_sessions = sessions.count()
+            total_study_time = sessions.aggregate(
+                total=Sum('total_time_seconds')
+            )['total'] or 0
+            
+            avg_session_duration = sessions.aggregate(
+                avg=Avg('total_time_seconds')
+            )['avg'] or 0
+            
+            avg_engagement = sessions.aggregate(
+                avg=Avg(F('active_time_seconds') * 100.0 / F('total_time_seconds'))
+            )['avg'] or 0
+            
+            # Interacciones totales
+            total_interactions = sessions.aggregate(
+                total=Sum('total_interactions')
+            )['total'] or 0
+            
+            # Materiales estudiados
+            materials = UserDidacticMaterial.objects.filter(user=user)
+            materials_by_type = materials.values('material_type').annotate(
+                count=Count('id'),
+                avg_engagement=Avg('engagement_score')
+            )
+            
+            # Sesiones por día (últimos 30 días)
+            thirty_days_ago = timezone.now() - timedelta(days=30)
+            sessions_by_day = sessions.filter(
+                started_at__gte=thirty_days_ago
+            ).extra(
+                select={'day': 'DATE(started_at)'}
+            ).values('day').annotate(
+                count=Count('id'),
+                total_time=Sum('total_time_seconds')
+            ).order_by('day')
+            
+            return Response({
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': f"{user.first_name} {user.last_name}"
+                },
+                'summary': {
+                    'total_sessions': total_sessions,
+                    'total_study_time_hours': round(total_study_time / 3600, 2),
+                    'avg_session_duration_minutes': round(avg_session_duration / 60, 2),
+                    'avg_engagement_percentage': round(avg_engagement, 2),
+                    'total_interactions': total_interactions
+                },
+                'materials_by_type': list(materials_by_type),
+                'sessions_by_day': list(sessions_by_day)
+            })
+            
+        except User.DoesNotExist:
+            return Response({
+                'error': 'Usuario no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=False, methods=['get'], url_path='material/(?P<material_id>[^/.]+)/heatmap')
+    def material_heatmap(self, request, material_id=None):
+        """
+        Obtiene el heatmap agregado de un material
+        GET /api/analytics/material/{material_id}/heatmap/
+        """
+        try:
+            material = UserDidacticMaterial.objects.get(id=material_id)
+            
+            # Obtener todas las sesiones del material
+            sessions = StudySession.objects.filter(material=material, is_active=False)
+            
+            # Agregar todos los clicks
+            all_clicks = []
+            for session in sessions:
+                heatmap = session.heatmap_data.first()
+                if heatmap:
+                    all_clicks.extend(heatmap.clicks)
+            
+            # Calcular zonas calientes agregadas
+            # (usar el mismo algoritmo que HeatmapData.calculate_hot_zones)
+            
+            return Response({
+                'material_id': material.id,
+                'total_sessions': sessions.count(),
+                'total_clicks': len(all_clicks),
+                'clicks': all_clicks  # O las hot_zones calculadas
+            })
+            
+        except UserDidacticMaterial.DoesNotExist:
+            return Response({
+                'error': 'Material no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)

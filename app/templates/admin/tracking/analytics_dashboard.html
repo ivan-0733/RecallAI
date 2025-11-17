@@ -1,0 +1,166 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .stats-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .stats-card h3 {
+        margin: 0 0 10px 0;
+        color: #666;
+        font-size: 14px;
+        text-transform: uppercase;
+    }
+    
+    .stats-card .number {
+        font-size: 36px;
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .table-responsive {
+        overflow-x: auto;
+    }
+    
+    .progress {
+        height: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>📊 Analytics Dashboard - RecallAI</h1>
+
+<div class="row" style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px;">
+    <!-- Card 1: Total Sesiones -->
+    <div class="col-md-3" style="flex: 1; min-width: 200px;">
+        <div class="stats-card">
+            <h3>Total de Sesiones</h3>
+            <div class="number">{{ total_sessions }}</div>
+            <small class="text-muted">
+                <strong>{{ sessions_this_week }}</strong> esta semana
+            </small>
+        </div>
+    </div>
+    
+    <!-- Card 2: Tiempo Total -->
+    <div class="col-md-3" style="flex: 1; min-width: 200px;">
+        <div class="stats-card">
+            <h3>Tiempo Total de Estudio</h3>
+            <div class="number">{{ total_study_time_hours }}h</div>
+            <small class="text-muted">Acumulado</small>
+        </div>
+    </div>
+    
+    <!-- Card 3: Engagement Promedio -->
+    <div class="col-md-3" style="flex: 1; min-width: 200px;">
+        <div class="stats-card">
+            <h3>Engagement Promedio</h3>
+            <div class="number">{{ avg_engagement }}%</div>
+            <small class="text-muted">Tiempo activo / Total</small>
+        </div>
+    </div>
+</div>
+
+<!-- Top Usuarios Más Activos -->
+<div class="module" style="margin-bottom: 30px;">
+    <h2>👥 Top 10 Usuarios Más Activos</h2>
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Usuario</th>
+                    <th>Sesiones</th>
+                    <th>Tiempo Total</th>
+                    <th>Engagement Promedio</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in top_users %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>
+                        <strong>{{ user.user__first_name }} {{ user.user__last_name }}</strong>
+                        <br>
+                        <small class="text-muted">{{ user.user__email }}</small>
+                    </td>
+                    <td><span class="badge badge-primary">{{ user.total_sessions }}</span></td>
+                    <td><strong>{{ user.total_time|floatformat:0|add:"0"|divisibleby:"3600"|yesno:"h,min" }}</strong></td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar bg-{% if user.avg_engagement >= 70 %}success{% elif user.avg_engagement >= 50 %}warning{% else %}danger{% endif %}" 
+                                 role="progressbar" 
+                                 style="width: {{ user.avg_engagement }}%">
+                                {{ user.avg_engagement|floatformat:1 }}%
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted">No hay datos disponibles</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Materiales Más Estudiados -->
+<div class="module">
+    <h2>📚 Top 10 Materiales Más Estudiados</h2>
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Material</th>
+                    <th>Tipo</th>
+                    <th>Sesiones</th>
+                    <th>Completitud Promedio</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for material in top_materials %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ material.material__text__title|truncatewords:10 }}</td>
+                    <td>
+                        {% if material.material__material_type == 'flashcard' %}
+                            📇 Flashcards
+                        {% elif material.material__material_type == 'decision_tree' %}
+                            🌳 Árbol
+                        {% elif material.material__material_type == 'mind_map' %}
+                            🧠 Mapa
+                        {% else %}
+                            📄 Resumen
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-info">{{ material.total_sessions }}</span></td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" style="width: {{ material.avg_completion }}%">
+                                {{ material.avg_completion|floatformat:0 }}%
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted">No hay datos disponibles</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

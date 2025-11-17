@@ -1,3 +1,8 @@
+# ========================================
+# URLs ACTUALIZADAS CON TRACKING
+# Reemplazar contenido de app/api/urls.py
+# ========================================
+
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.routers import DefaultRouter
@@ -13,7 +18,9 @@ from apps.pdi_texts.views import (
     PDITextViewSet,
     QuizAttemptViewSet,
     UserProfileViewSet,
-    UserDidacticMaterialViewSet
+    UserDidacticMaterialViewSet,
+    TrackingViewSet,
+    AnalyticsViewSet
 )
 
 app_name = 'api'
@@ -24,6 +31,10 @@ router.register(r'texts', PDITextViewSet, basename='texts')
 router.register(r'attempts', QuizAttemptViewSet, basename='attempts')
 router.register(r'profile', UserProfileViewSet, basename='user-profile')
 router.register(r'materials', UserDidacticMaterialViewSet, basename='materials')
+
+# NUEVAS RUTAS DE TRACKING
+router.register(r'tracking', TrackingViewSet, basename='tracking')
+router.register(r'analytics', AnalyticsViewSet, basename='analytics')
 
 urlpatterns = [
     # Autenticación (API REST)
