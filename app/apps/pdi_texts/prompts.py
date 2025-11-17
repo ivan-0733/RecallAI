@@ -229,7 +229,6 @@ IMPORTANTE:
 
     return prompt
 
-
 def get_decision_tree_prompt(text_title, text_topic, weak_topics, review_topics, incorrect_questions_text, text_content_preview):
     """Prompt para Árbol de Decisión con algoritmo force-directed"""
     
@@ -242,16 +241,19 @@ def get_decision_tree_prompt(text_title, text_topic, weak_topics, review_topics,
     enfoque_texto = ""
     
     if tiene_temas_debiles:
+        # --- INICIO DE LA MODIFICACIÓN (YA APLICADA) ---
         enfoque_texto = f"""
 ENFOQUE ADAPTATIVO (REGLA 75/25):
-- **75% del árbol**: Enfócate en los temas débiles del estudiante: {weak_topics_str}
-  → Crea más nodos, subtemas y detalles sobre estos conceptos
-  → Profundiza en ejemplos, casos de uso y explicaciones detalladas
+- **75% del árbol (FOCO DÉBIL)**: Enfócate en los temas débiles del estudiante: {weak_topics_str}
+  → Crea más nodos, subtemas y detalles sobre estos conceptos.
+  → Profundiza en ejemplos, casos de uso y explicaciones detalladas (Nivel 2 y Nivel 3).
   
-- **25% del árbol**: Incluye temas de repaso general: {review_topics_str}
-  → Estos deben ser ramas más pequeñas, con menos profundidad
-  → Sirven como contexto, pero no son el foco principal
+- **25% del árbol (FOCO REPASO)**: Incluye temas de repaso general: {review_topics_str}
+  → **¡NUEVA INSTRUCCIÓN!** Estos temas también deben ser detallados.
+  → Desarrolla estos temas con subtemas y detalles (Nivel 2 y Nivel 3) para reforzar el conocimiento.
+  → Asegúrate de que incluyan explicaciones y ejemplos clave.
 """
+        # --- FIN DE LA MODIFICACIÓN ---
     else:
         enfoque_texto = f"""
 ENFOQUE GENERAL:
@@ -260,6 +262,7 @@ Como no hay temas débiles identificados, crea un árbol balanceado que cubra:
 - Aplicaciones prácticas
 - Métricas y evaluación
 - Casos especiales o avanzados
+- Desarrolla todas las ramas hasta Nivel 2 o Nivel 3 con detalle.
 """
     
     return f"""Genera un árbol de decisión interactivo sobre: "{text_topic}"
@@ -308,30 +311,34 @@ ESTRUCTURA JSON REQUERIDA (RESPONDE SOLO CON ESTE JSON):
 }}
 
 REGLAS CRÍTICAS:
-1. **Niveles jerárquicos:**
+(--- INICIO DE LA MODIFICACIÓN ---)
+1. **Calidad y Detalle (¡MUY IMPORTANTE!):** La información en cada nodo debe ser de alta calidad, precisa y estar bien redactada. Prioriza explicaciones claras y educativas (1-2 frases) sobre simples palabras clave. El contenido debe ser útil para el estudio.
+
+2. **Niveles jerárquicos:**
    - Nivel 0: 1 solo nodo raíz (el concepto más general)
    - Nivel 1: 3-5 categorías principales
    - Nivel 2: 3-7 subtemas por categoría
    - Nivel 3: 2-5 detalles/ejemplos por subtema
 
-2. **IDs únicos:** Usa formato: raiz, cat_1, cat_2, sub_1_1, sub_1_2, det_1_1_1, etc.
+3. **IDs únicos:** Usa formato: raiz, cat_1, cat_2, sub_1_1, sub_1_2, det_1_1_1, etc.
 
-3. **Texto conciso:** Máximo 50 caracteres por nodo. Usa frases cortas y directas.
+4. **Texto (¡Importante!):** El límite de 50 caracteres YA NO APLICA. El texto ahora puede ser más largo (ej. 1-2 frases cortas) para ser más detallado, ya que el visualizador (el HTML) lo ajustará automáticamente.
 
-4. **Marcado de temas débiles:** Si el nodo trata un tema débil ({weak_topics_str}), agrega `"es_tema_debil": true`
+5. **Marcado de temas débiles:** Si el nodo trata un tema débil ({weak_topics_str}), agrega `"es_tema_debil": true`
 
-5. **Proporción 75/25:** 
-   - Si hay temas débiles, el 75% de los nodos (especialmente nivel 2 y 3) deben ser sobre {weak_topics_str}
+6. **Proporción 75/25:** - Si hay temas débiles, el 75% de los nodos (especialmente nivel 2 y 3) deben ser sobre {weak_topics_str}
    - Solo el 25% debe ser repaso ({review_topics_str})
 
-6. **Cada nodo hijo debe tener exactamente 1 padre**
+7. **Cada nodo hijo debe tener exactamente 1 padre**
 
-7. **Profundidad variable:** 
-   - Temas débiles: desarrolla hasta nivel 3 con muchos detalles
-   - Temas de repaso: puedes quedarte en nivel 2
+8. **Profundidad:**
+   - **Tanto los temas débiles como los temas de repaso** deben desarrollarse con detalle.
+   - Intenta que la mayoría de las ramas (débiles y de repaso) lleguen hasta **Nivel 3** con ejemplos o detalles.
+(--- FIN DE LA MODIFICACIÓN ---)
+
 
 EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métricas"):
-
+(--- INICIO DE LA MODIFICACIÓN: Ejemplos más detallados ---)
 {{
   "tipo": "arbol_decision",
   "titulo": "Aprendizaje Supervisado: Regresión y Clasificación",
@@ -339,14 +346,14 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
     "nodos": [
       {{
         "id": "raiz",
-        "texto": "Aprendizaje Supervisado",
+        "texto": "Aprendizaje Supervisado (General)",
         "nivel": 0,
         "padre": null,
         "tipo": "raiz"
       }},
       {{
         "id": "cat_regresion",
-        "texto": "Regresión y Correlación",
+        "texto": "Regresión y Correlación (Repaso)",
         "nivel": 1,
         "padre": "raiz",
         "tipo": "categoria",
@@ -354,15 +361,23 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "sub_reg_proposito",
-        "texto": "Propósito",
+        "texto": "Propósito de la Regresión",
         "nivel": 2,
         "padre": "cat_regresion",
         "tipo": "subtema",
         "es_tema_debil": false
       }},
       {{
+        "id": "det_reg_proposito_1",
+        "texto": "Predecir valores numéricos continuos (ej. precio de casa, temperatura)",
+        "nivel": 3,
+        "padre": "sub_reg_proposito",
+        "tipo": "detalle",
+        "es_tema_debil": false
+      }},
+      {{
         "id": "cat_metricas",
-        "texto": "Métricas de Evaluación",
+        "texto": "Métricas de Evaluación (Tema Débil)",
         "nivel": 1,
         "padre": "raiz",
         "tipo": "categoria",
@@ -378,7 +393,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "det_matriz_tp",
-        "texto": "Verdaderos Positivos (TP)",
+        "texto": "Verdaderos Positivos (TP): Casos positivos predichos correctamente.",
         "nivel": 3,
         "padre": "sub_matriz_confusion",
         "tipo": "detalle",
@@ -386,7 +401,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "det_matriz_fp",
-        "texto": "Falsos Positivos (FP)",
+        "texto": "Falsos Positivos (FP): Casos negativos predichos incorrectamente (Error Tipo I).",
         "nivel": 3,
         "padre": "sub_matriz_confusion",
         "tipo": "detalle",
@@ -402,7 +417,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "det_precision_formula",
-        "texto": "Fórmula: TP / (TP + FP)",
+        "texto": "Fórmula: TP / (TP + FP). Mide la calidad de las predicciones positivas.",
         "nivel": 3,
         "padre": "sub_precision",
         "tipo": "detalle",
@@ -410,7 +425,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "det_precision_uso",
-        "texto": "Útil cuando el costo de FP es alto",
+        "texto": "Alta precisión es crucial cuando el costo de un Falso Positivo es alto (ej. spam).",
         "nivel": 3,
         "padre": "sub_precision",
         "tipo": "detalle",
@@ -426,7 +441,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "det_recall_formula",
-        "texto": "Fórmula: TP / (TP + FN)",
+        "texto": "Fórmula: TP / (TP + FN). Mide cuántos positivos reales se capturaron.",
         "nivel": 3,
         "padre": "sub_recall",
         "tipo": "detalle",
@@ -442,7 +457,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
       }},
       {{
         "id": "det_f1_balance",
-        "texto": "Balancea Precisión y Recall",
+        "texto": "Media armónica de Precisión y Recall. Útil para clases desbalanceadas.",
         "nivel": 3,
         "padre": "sub_f1_score",
         "tipo": "detalle",
@@ -451,6 +466,7 @@ EJEMPLO DE ESTRUCTURA (para "Aprendizaje Supervisado" con tema débil en "Métri
     ]
   }}
 }}
+(--- FIN DE LA MODIFICACIÓN ---)
 
 CONTEXTO DEL ESTUDIANTE:
 - Temas débiles identificados: {weak_topics_str}
@@ -458,7 +474,6 @@ CONTEXTO DEL ESTUDIANTE:
 - Material de referencia: {text_content_preview[:500]}...
 
 IMPORTANTE: Responde ÚNICAMENTE con el JSON. No incluyas texto adicional, explicaciones ni markdown. El JSON debe ser válido y estar completo."""
-
 
 def get_mind_map_prompt(text_title, text_topic, weak_topics, review_topics, text_content_preview):
     """Prompt para Mapa Mental"""

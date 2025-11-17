@@ -46,14 +46,13 @@
         .header-title-area {
             padding: 25px 30px;
             display: flex;
-            /* justify-content: space-between; <-- Se cambia esto */
-            justify-content: center; /* CAMBIO: Se centra el contenido principal */
+            justify-content: center;
             align-items: center;
             gap: 20px;
             background: var(--color-default-bg); 
             color: var(--color-default-fg); 
             transition: all 0.5s ease;
-            position: relative; /* CAMBIO: Se añade para anclar el botón */
+            position: relative;
         }
         
         /* Se aplican los fondos de color dinámicamente */
@@ -81,7 +80,7 @@
         .header-title { 
             flex: 1; 
             min-width: 0; 
-            text-align: center; /* CAMBIO: Se centra el texto dentro del contenedor del título */
+            text-align: center;
         }
         .header-title h1 {
             margin: 0;
@@ -101,11 +100,10 @@
             opacity: 0.8;
         }
 
-        /* CAMBIO: Se posiciona el contenedor del botón de forma absoluta */
         .header-title-area > div:last-child {
             position: absolute;
-            right: 30px; /* Alineado a la derecha del padding */
-            top: 50%; /* Centrado verticalmente */
+            right: 30px;
+            top: 50%;
             transform: translateY(-50%);
         }
 
@@ -214,6 +212,81 @@
             height: 3rem; 
             border-width: 0.3em; 
         }
+
+        /* --- (ACTUALIZADO) ESTILOS PARA EL ÁRBOL D3 "HERMOSO" --- */
+        #arbol-container {
+            /* Fondo blanco para el lienzo */
+            background-color: #ffffff !important; 
+        }
+        
+        .arbol-link {
+            /* Color de línea gris y sólido */
+            stroke: #ccc;
+            stroke-width: 2px;
+            fill: none;
+        }
+        
+        g.arbol-nodo {
+            cursor: pointer;
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.08));
+            /* (CORREGIDO) La transición de 'transform' la maneja D3 */
+            transition: filter 0.3s ease;
+        }
+        g.arbol-nodo:hover {
+            filter: drop-shadow(0 6px 16px rgba(0,0,0,0.12));
+            /* (CORREGIDO) Eliminado el transform:scale() para evitar vibraciones */
+        }
+        
+        g.arbol-nodo rect {
+            /* Transición solo para el borde */
+            transition: stroke 0.3s ease, fill 0.3s ease; 
+        }
+        
+        /* (NUEVO) Estilo para el div dentro del foreignObject */
+        .arbol-texto-contenedor {
+            /* Este div maneja el centrado y el ajuste de texto */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 10px; /* Padding interno para que el texto no toque los bordes */
+            box-sizing: border-box; /* Importante para el padding */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: #333333;
+            /* Ajuste de texto automático */
+            word-wrap: break-word; 
+            word-break: break-word; /* Opcional: para palabras muy largas */
+            line-height: 1.2;
+        }
+
+        /* (NUEVO) Estilo especial para el texto de temas débiles */
+        .arbol-texto-contenedor.tema-debil {
+            color: #E74C3C;
+            font-weight: bold;
+        }
+        
+        /* (NUEVO) Estilo para el texto de la raíz */
+        .arbol-texto-contenedor.raiz {
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+
+        /* Estilo para el botón de expandir */
+        .arbol-boton-toggle circle {
+            transition: all 0.3s ease;
+        }
+        .arbol-boton-toggle:hover circle {
+            transform: scale(1.1);
+        }
+        .arbol-boton-toggle text {
+            pointer-events: none;
+        }
+
     </style>
     </head>
 <body>
@@ -262,6 +335,8 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 
     <script>
     let materialData = null;
@@ -294,12 +369,7 @@
                     // Si la llamada es exitosa, se muestra el material
                     materialData = material;
                     displayMaterial(materialData);
-                    
-                    // --- INICIO DE NUEVA LÓGICA ---
-                    // Se llama a la función para cargar los temas dominados
-                    // Se pasa el ID del texto (material.text) y la lista de temas débiles
                     loadAndDisplayStrongTopics(material.text, material.weak_topics);
-                    // --- FIN DE NUEVA LÓGICA ---
                 },
                 error: function(xhr) {
                     // Se manejan errores
@@ -424,7 +494,7 @@
                 
                 // Renderizar el árbol
                 $('#loadingSpinner').hide();
-                renderizarArbolDecision(arbolData);
+                renderizarArbolDecision(arbolData); // <--- ESTA ES LA NUEVA FUNCIÓN D3 (v8 - Tree Corregida)
                 trackMaterialView(material.id);
                 return; // IMPORTANTE: Salir aquí
             }
@@ -468,12 +538,7 @@
             trackMaterialView(material.id);
         }
 
-/**
-         * Se obtiene el quiz de un texto, se calculan los temas dominados (complemento)
-         * y se muestran en la sección verde.
-         */
-         function loadAndDisplayStrongTopics(textId, weakTopics) {
-            // Usamos el ID del contenedor de la sección (el <div> principal de temas dominados)
+        function loadAndDisplayStrongTopics(textId, weakTopics) {
             const strongTopicsSection = $('#strongTopicsContainer');
             
             fetch(`/api/texts/${textId}/quiz/`)
@@ -486,7 +551,7 @@
                 .then(data => {
                     if (!data.quiz || !data.quiz.questions_json) {
                         console.warn('No quiz data found for this text, hiding strong topics section.');
-                        strongTopicsSection.hide(); // Oculta con jQuery
+                        strongTopicsSection.hide();
                         return; 
                     }
                     
@@ -494,7 +559,7 @@
                     const allTopics = new Set();
                     
                     questions.forEach(question => {
-                        if (question.tema) {  // Ahora busca 'tema' en español
+                        if (question.tema) {
                             allTopics.add(question.tema);
                         }
                     });
@@ -502,434 +567,341 @@
                     const weakTopicsSet = new Set(weakTopics);
                     const strongTopics = [...allTopics].filter(topic => !weakTopicsSet.has(topic));
 
-                    // --- INICIO DE LA CORRECCIÓN ---
-                    // Se comprueba si hay temas dominados
                     if (strongTopics.length > 0) {
-                        
-                        // 1. Se crea el HTML de los tags verdes
                         const topicsHTML = strongTopics.map(topic => 
                             `<span class="topic-tag-green"><i class="fas fa-check-circle icon"></i> ${topic}</span>`
                         ).join('');
                         
-                        // 2. Se inserta el HTML en el contenedor de la *lista* (#strongTopicsList)
                         $('#strongTopicsList').html(topicsHTML);
-                        
-                        // 3. Se muestra la *sección* completa
-                        strongTopicsSection.show(); // Muestra con jQuery
+                        strongTopicsSection.show();
 
                     } else {
-                        // Si no hay temas dominados, se oculta la sección
                         strongTopicsSection.hide();
                     }
-                    // --- FIN DE LA CORRECCIÓN ---
                 })
                 .catch(error => {
                     console.error('Error fetching strong topics:', error);
-                    strongTopicsSection.hide(); // Oculta la sección en caso de error
+                    strongTopicsSection.hide();
                 });
         }
-        // --- FIN DE NUEVA FUNCIÓN ---
 
         function trackMaterialView(materialId) {
-                    const token = localStorage.getItem('access_token');
-                    console.log('Material viewed:', materialId);
-                }
+            const token = localStorage.getItem('access_token');
+            console.log('Material viewed:', materialId);
+        }
 
-                // Las funciones printMaterial() y downloadMaterial() han sido ELIMINADAS
+        // ============================================
+        // === INICIO CÓDIGO D3 v8 (LAYOUT DE ÁRBOL "HERMOSO" CORREGIDO) ===
+        // ============================================
 
-                // ============================================
-                // FUNCIONES PARA ÁRBOL DE DECISIÓN
-                // ============================================
+        // --- Variables globales para D3 Tree ---
+        let svg, g, treeLayout, rootNode;
+        let i = 0; // Contador para IDs únicos si es necesario
+        
+        // --- (AJUSTABLE) Duración de la animación ---
+        const transitionDuration = 400; // 400ms, más rápido
 
-                function renderizarArbolDecision(datos) {
+        // --- (AJUSTABLE) Espaciado y tamaño del árbol ---
+        const nodeWidth = 200;                  // Ancho fijo del rectángulo
+        const nodeHeight = 60;                  // Alto fijo del rectángulo
+        const nodeHorizontalSeparation = 260;   // Espacio horizontal ENTRE nodos (columna a columna)
+        
+        // --- (CORREGIDO) Espaciado vertical más junto ---
+        const nodeVerticalSeparation = 80;      
+
+        // 1. Función principal que inicia el renderizado
+        function renderizarArbolDecision(datos) {
             const container = $('#materialContent');
             
-            // Validar estructura de datos
             if (!datos.datos || !datos.datos.nodos) {
                 container.html('<div class="alert alert-danger">Error: Estructura de árbol inválida</div>').fadeIn();
                 return;
             }
+
+            // 1. Convertir lista plana a jerarquía (¡CRÍTICO!)
+            try {
+                rootNode = d3.stratify()
+                    .id(d => d.id)
+                    .parentId(d => d.padre)
+                    (datos.datos.nodos);
+            } catch (error) {
+                console.error("Error al estratificar los datos:", error);
+                console.error("Datos que fallaron:", datos.datos.nodos);
+                container.html('<div class="alert alert-danger">Error: Los datos del árbol tienen una jerarquía rota (ej. un hijo sin padre).</div>').fadeIn();
+                return;
+            }
             
+            // 2. Definir dimensiones y márgenes
+            const margin = { top: 20, right: 120, bottom: 20, left: 160 }; // Más margen izquierdo para el nodo raíz
+            const height = 800; // Alto fijo del viewport
+
+            // 3. (CORREGIDO) Crear el layout de árbol de D3
+            treeLayout = d3.tree().nodeSize([nodeVerticalSeparation, nodeHorizontalSeparation]);
+
+            // 4. Limpiar contenedor y añadir HTML del SVG
             const html = `
-                <div id="arbol-container" style="width: 100%; height: 800px; background: #f8f9fa; border-radius: 12px; position: relative; overflow: hidden;">
-                    <svg id="arbol-svg" width="100%" height="100%">
-                        <defs>
-                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" style="stop-color:#a8b5ff;stop-opacity:0.6" />
-                                <stop offset="100%" style="stop-color:#7dd3c0;stop-opacity:0.6" />
-                            </linearGradient>
-                        </defs>
-                        <g id="arbol-links"></g>
-                        <g id="arbol-nodes"></g>
-                    </svg>
+                <div id="arbol-container" style="width: 100%; height: 800px; position: relative; overflow: hidden; background: #ffffff; border-radius: 12px;">
+                    <svg id="arbol-svg" width="100%" height="100%"></svg>
                     
                     <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 1000;">
-                        <button onclick="zoomArbol(1.2)" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">+</button>
-                        <button onclick="zoomArbol(0.8)" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">−</button>
-                        <button onclick="resetZoomArbol()" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 16px;">⟲</button>
+                        <button id="zoom-in" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">+</button>
+                        <button id="zoom-out" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 20px;">−</button>
+                        <button id="zoom-reset" style="width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 16px;">⟲</button>
                     </div>
                 </div>
             `;
-            
             container.html(html).fadeIn();
-            
-            // CRÍTICO: NO agregar animaciones automáticas en la carga inicial
-            // Solo aplicar transiciones suaves para cambios posteriores
-            const styleElement = document.createElement('style');
-            styleElement.id = 'arbol-styles';
-            styleElement.textContent = `
-                /* Transiciones suaves para cambios (NO para carga inicial) */
-                #arbol-nodes g {
-                    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-                }
-                
-                #arbol-links path {
-                    transition: all 0.4s ease;
-                }
-            `;
-            
-            // Remover estilos anteriores si existen
-            const oldStyle = document.getElementById('arbol-styles');
-            if (oldStyle) oldStyle.remove();
-            
-            document.head.appendChild(styleElement);
-            
-            // Renderizar árbol inmediatamente
-            inicializarArbolForzado(datos.datos.nodos);
-        }
 
-        let arbolState = {
-            nodos: [],
-            nodosExpandidos: new Set(['raiz']),
-            escala: 1
-        };
-
-        function inicializarArbolForzado(nodosData) {
-            arbolState.nodos = nodosData;
-            arbolState.nodosExpandidos = new Set(['raiz']);
-            renderizarArbol();
-        }
-
-        function renderizarArbol() {
-            const nodosVisibles = obtenerNodosVisibles();
-            const enlaces = obtenerEnlacesVisibles(nodosVisibles);
+            // 5. Seleccionar SVG y añadir grupo principal
+            svg = d3.select("#arbol-svg");
             
-            const width = $('#arbol-svg').width();
-            const height = $('#arbol-svg').height();
+            g = svg.append("g")
+                   .attr("transform", `translate(${margin.left}, ${margin.top})`);
             
-            const posiciones = calcularPosicionesJerarquicas(nodosVisibles, width, height);
-            
-            // Renderizar sin delay en la carga inicial
-            renderizarEnlaces(enlaces, posiciones);
-            renderizarNodos(nodosVisibles, posiciones);
-        }
-
-        function obtenerNodosVisibles() {
-            return arbolState.nodos.filter(nodo => {
-                if (nodo.nivel === 0) return true;
-                return arbolState.nodosExpandidos.has(nodo.padre);
-            });
-        }
-
-        function obtenerEnlacesVisibles(nodosVisibles) {
-            const idsVisibles = new Set(nodosVisibles.map(n => n.id));
-            return nodosVisibles
-                .filter(nodo => nodo.padre && idsVisibles.has(nodo.padre))
-                .map(nodo => ({ source: nodo.padre, target: nodo.id }));
-        }
-
-        function calcularPosicionesJerarquicas(nodos, width, height) {
-            const posiciones = {};
-            const padding = 80;
-            
-            // Posiciones X fijas por nivel
-            const nivelX = {
-                0: 150,
-                1: width * 0.33,
-                2: width * 0.60,
-                3: width * 0.85
-            };
-            
-            // PASO 1: Agrupar nodos por nivel
-            const porNivel = {};
-            nodos.forEach(nodo => {
-                if (!porNivel[nodo.nivel]) porNivel[nodo.nivel] = [];
-                porNivel[nodo.nivel].push(nodo);
-            });
-            
-            // PASO 2: Posicionar la raíz (siempre centrada)
-            const raiz = nodos.find(n => n.nivel === 0);
-            if (raiz) {
-                posiciones[raiz.id] = { x: nivelX[0], y: height / 2 };
-            }
-            
-            // PASO 3: Para cada nivel (1, 2, 3), distribuir TODOS los nodos uniformemente
-            [1, 2, 3].forEach(nivelActual => {
-                const nodosDelNivel = porNivel[nivelActual] || [];
-                if (nodosDelNivel.length === 0) return;
-                
-                const numNodos = nodosDelNivel.length;
-                const espacioDisponible = height - (2 * padding);
-                
-                // DISTRIBUCIÓN UNIFORME: dividir el espacio verticalmente
-                const espacioPorNodo = espacioDisponible / Math.max(numNodos - 1, 1);
-                
-                // Posicionar cada nodo equidistantemente
-                nodosDelNivel.forEach((nodo, index) => {
-                    let y;
-                    
-                    if (numNodos === 1) {
-                        // Si hay un solo nodo, centrarlo
-                        y = height / 2;
-                    } else {
-                        // Distribuir uniformemente de arriba a abajo
-                        y = padding + (index * espacioPorNodo);
-                    }
-                    
-                    posiciones[nodo.id] = {
-                        x: nivelX[nivelActual],
-                        y: y
-                    };
+            // 6. Definir el comportamiento de Zoom y Arrastre (Pan)
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 2])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
                 });
-            });
             
-            return posiciones;
-        }
+            svg.call(zoom)
+               .on("dblclick.zoom", null) // Deshabilitar zoom con doble click
+               .style("cursor", "grab"); // Cursor para indicar que se puede arrastrar
 
-        function renderizarEnlaces(enlaces, posiciones) {
-            const linksGroup = document.getElementById('arbol-links');
-            linksGroup.innerHTML = '';
+            // 7. Conectar botones de zoom
+            const initialTransform = d3.zoomIdentity.translate(margin.left, height / 2);
+            d3.select("#zoom-in").on("click", () => svg.transition().duration(300).call(zoom.scaleBy, 1.2));
+            d3.select("#zoom-out").on("click", () => svg.transition().duration(300).call(zoom.scaleBy, 0.8));
+            d3.select("#zoom-reset").on("click", () => svg.transition().duration(300).call(zoom.transform, initialTransform));
             
-            enlaces.forEach(enlace => {
-                const source = posiciones[enlace.source];
-                const target = posiciones[enlace.target];
-                
-                if (!source || !target) return;
-                
-                const midX = (source.x + target.x) / 2;
-                const path = `M ${source.x} ${source.y} Q ${midX} ${source.y}, ${midX} ${(source.y + target.y) / 2} Q ${midX} ${target.y}, ${target.x} ${target.y}`;
-                
-                const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                pathElement.setAttribute('d', path);
-                pathElement.setAttribute('stroke', 'url(#lineGradient)');
-                pathElement.setAttribute('stroke-width', '2');
-                pathElement.setAttribute('fill', 'none');
-                pathElement.setAttribute('opacity', '0.6');
-                
-                linksGroup.appendChild(pathElement);
-            });
-        }
-
-        function renderizarNodos(nodos, posiciones) {
-    const nodesGroup = document.getElementById('arbol-nodes');
-    
-    // NUEVO: Obtener nodos existentes para animar transiciones
-    const nodosExistentes = new Map();
-    Array.from(nodesGroup.children).forEach(nodoDOM => {
-        const nodoId = nodoDOM.dataset.nodoId;
-        if (nodoId) {
-            nodosExistentes.set(nodoId, nodoDOM);
-        }
-    });
-    
-    // Conjunto de IDs de nodos que deben estar visibles
-    const nodosVisiblesIds = new Set(nodos.map(n => n.id));
-    
-    // PASO 1: Animar salida de nodos que ya no están
-    nodosExistentes.forEach((nodoDOM, nodoId) => {
-        if (!nodosVisiblesIds.has(nodoId)) {
-            nodoDOM.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
-            nodoDOM.style.opacity = '0';
-            nodoDOM.style.transform = nodoDOM.getAttribute('transform') + ' scale(0.5)';
-            setTimeout(() => {
-                if (nodoDOM.parentNode) {
-                    nodoDOM.remove();
+            // 8. (CORREGIDO) Colapsar nodos iniciales
+            rootNode.descendants().forEach(d => {
+                d.data.id = d.id;
+                // (NUEVA LÓGICA) Colapsa todo lo que esté en el nivel 1 o más profundo (depth > 0)
+                if (d.depth > 0) { 
+                    if(d.children) { // Solo si tiene hijos
+                        d._children = d.children; // Guarda los hijos
+                        d.children = null; // Colapsa
+                    }
                 }
-            }, 400);
-        }
-    });
-    
-    // PASO 2: Crear o actualizar nodos visibles
-    nodos.forEach((nodo, index) => {
-        const pos = posiciones[nodo.id];
-        if (!pos) return;
-        
-        const estilo = obtenerEstiloNodo(nodo.nivel, nodo.es_tema_debil);
-        const tieneHijos = arbolState.nodos.some(n => n.padre === nodo.id);
-        const estaExpandido = arbolState.nodosExpandidos.has(nodo.id);
-        
-        // Verificar si el nodo ya existe
-        let g = nodosExistentes.get(nodo.id);
-        const esNuevo = !g;
-        
-        if (!g) {
-            // Crear nuevo nodo
-            g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.dataset.nodoId = nodo.id;
-            g.style.opacity = '0';
-            g.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-            nodesGroup.appendChild(g);
-        } else {
-            // Actualizar transición para nodos existentes
-            g.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-        }
-        
-        // Actualizar posición
-        g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
-        g.style.cursor = 'pointer';
-        
-        // Animar entrada para nodos nuevos con efecto cascada
-        // Mostrar inmediatamente (sin animación en carga inicial)
-        g.style.opacity = '1';
-        
-        // Limpiar contenido anterior
-        g.innerHTML = '';
-        
-        // Calcular ancho del nodo
-        const ancho = calcularAnchoNodo(nodo.texto);
-        
-        // Crear rectángulo del nodo
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', -ancho / 2);
-        rect.setAttribute('y', -20);
-        rect.setAttribute('width', ancho);
-        rect.setAttribute('height', 40);
-        rect.setAttribute('rx', estilo.borderRadius);
-        rect.setAttribute('fill', estilo.background);
-        rect.setAttribute('stroke', estilo.border);
-        rect.setAttribute('stroke-width', nodo.es_tema_debil ? '3' : '2');
-        rect.style.filter = 'drop-shadow(0 2px 8px rgba(0,0,0,0.1))';
-        rect.style.transition = 'all 0.3s ease';
-        
-        // Crear texto del nodo
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dy', '0.35em');
-        text.setAttribute('fill', estilo.color);
-        text.setAttribute('font-size', estilo.fontSize);
-        text.setAttribute('font-weight', estilo.fontWeight);
-        text.textContent = nodo.texto.length > 40 ? nodo.texto.substring(0, 37) + '...' : nodo.texto;
-        
-        g.appendChild(rect);
-        g.appendChild(text);
-        
-        // Agregar botón de expandir/colapsar si tiene hijos
-        if (tieneHijos) {
-            const boton = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            boton.setAttribute('transform', `translate(${ancho / 2 + 15}, 0)`);
-            boton.style.transition = 'transform 0.3s ease';
-            
-            const circulo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circulo.setAttribute('r', '12');
-            circulo.setAttribute('fill', estilo.buttonBackground);
-            circulo.setAttribute('stroke', estilo.border);
-            circulo.setAttribute('stroke-width', '2');
-            circulo.style.transition = 'all 0.3s ease';
-            
-            const icono = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            icono.setAttribute('text-anchor', 'middle');
-            icono.setAttribute('dy', '0.35em');
-            icono.setAttribute('fill', estilo.buttonColor);
-            icono.setAttribute('font-size', '14');
-            icono.setAttribute('font-weight', 'bold');
-            icono.textContent = estaExpandido ? '<' : '>';
-            icono.style.transition = 'transform 0.3s ease';
-            
-            boton.appendChild(circulo);
-            boton.appendChild(icono);
-            g.appendChild(boton);
-            
-            // Efecto hover para el botón
-            boton.addEventListener('mouseenter', () => {
-                circulo.style.transform = 'scale(1.1)';
             });
-            boton.addEventListener('mouseleave', () => {
-                circulo.style.transform = 'scale(1)';
-            });
-        }
-        
-        // Event listener para expandir/colapsar
-        g.addEventListener('click', (e) => {
-            // Efecto visual de click
-            rect.style.transform = 'scale(0.95)';
-            setTimeout(() => {
-                rect.style.transform = 'scale(1)';
-            }, 150);
             
-            // Ejecutar toggle
-            toggleNodo(nodo.id);
-        });
-        
-        // Efecto hover para todo el nodo
-        g.addEventListener('mouseenter', () => {
-            rect.style.filter = 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))';
-            rect.style.transform = 'scale(1.03)';
-        });
-        
-        g.addEventListener('mouseleave', () => {
-            rect.style.filter = 'drop-shadow(0 2px 8px rgba(0,0,0,0.1))';
-            rect.style.transform = 'scale(1)';
-        });
-    });
-}
+            // 9. Guardar posición inicial (para animación de entrada)
+            rootNode.x0 = height / 2;
+            rootNode.y0 = 0;
 
+            // 10. Renderizar por primera vez
+            updateArbol(rootNode);
+            
+            // 11. Centrar el nodo raíz inicial
+            svg.call(zoom.transform, initialTransform);
+        }
+
+        // 2. Función de Actualización (El corazón del renderizado)
+        function updateArbol(source) {
+            
+            // 1. Calcular el nuevo layout
+            const treeData = treeLayout(rootNode);
+
+            // 2. Obtener listas de nodos y enlaces
+            const nodes = treeData.descendants();
+            const links = treeData.links();
+
+            // --- 4. ACTUALIZAR NODOS ---
+            const node = g.selectAll("g.arbol-nodo")
+                .data(nodes, d => d.id || (d.id = ++i));
+
+            // --- Nodos que Entran (Nuevos) ---
+            const nodeEnter = node.enter().append("g")
+                .attr("class", "arbol-nodo")
+                .attr("transform", d => `translate(${source.y0},${source.x0})`) // Inicia en la posición del padre
+                .style("opacity", 0)
+                .on("click", toggleNodo); // Asigna el click
+
+            // (ACTUALIZADO) Añadir Rectángulo
+            nodeEnter.append("rect")
+                .attr("width", nodeWidth)
+                .attr("height", nodeHeight)
+                .attr("x", -nodeWidth / 2) // Centrar el rectángulo
+                .attr("y", -nodeHeight / 2) // Centrar el rectángulo
+                .attr("rx", d => obtenerEstiloNodo(d.data.nivel, d.data.es_tema_debil).borderRadius)
+                .style("stroke-width", "2px");
+
+            // (NUEVO) Añadir foreignObject para el texto HTML
+            nodeEnter.append("foreignObject")
+                .attr("width", nodeWidth - 20) // Ancho - padding (10px a cada lado)
+                .attr("height", nodeHeight - 10) // Alto - padding (5px arriba/abajo)
+                .attr("x", - (nodeWidth / 2) + 10) // Posición x + padding
+                .attr("y", - (nodeHeight / 2) + 5) // Posición y + padding
+                .style("pointer-events", "none") // Evita que intercepte el click
+                .append("xhtml:div")
+                .attr("class", "arbol-texto-contenedor");
+
+
+            // Añadir Botón de Expandir
+            const botonToggle = nodeEnter.append("g")
+                .attr("class", "arbol-boton-toggle");
+
+            botonToggle.append("circle").attr("r", 12).style("stroke-width", "2px");
+
+            botonToggle.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .attr("font-size", "14px")
+                .attr("font-weight", "bold");
+
+            // --- Nodos que se Actualizan (Transición) ---
+            const nodeUpdate = nodeEnter.merge(node);
+            
+            // Transición a la nueva posición
+            nodeUpdate.transition()
+                .duration(transitionDuration)
+                .attr("transform", d => `translate(${d.y},${d.x})`)
+                .style("opacity", 1);
+            
+            // Actualizar el contenido y estilo de los nodos
+            nodeUpdate.each(function(d) {
+                const estilo = obtenerEstiloNodo(d.data.nivel, d.data.es_tema_debil);
+
+                // Actualizar Rectángulo (Colores "hermosos")
+                d3.select(this).select("rect")
+                    .transition().duration(transitionDuration)
+                    .attr("fill", estilo.background) // Fondo blanco
+                    .attr("stroke", estilo.border);   // Borde de color
+
+                // (NUEVO) Actualizar Texto en el foreignObject
+                let claseTexto = "arbol-texto-contenedor";
+                if (d.data.es_tema_debil) claseTexto += " tema-debil";
+                if (d.depth === 0) claseTexto += " raiz"; // Clase especial para la raíz
+
+                d3.select(this).select(".arbol-texto-contenedor")
+                    .html(d.data.texto) // Asigna el HTML (texto)
+                    .attr("class", claseTexto); // Añade clases de estilo
+
+                // Actualizar Botón
+                const boton = d3.select(this).select(".arbol-boton-toggle");
+                
+                if (d.children || d._children) { // Solo mostrar si tiene hijos (abiertos o colapsados)
+                    boton.style("display", null)
+                         .attr("transform", `translate(${nodeWidth / 2 + 15}, 0)`);
+                    
+                    boton.select("circle")
+                        .transition().duration(transitionDuration)
+                        .attr("fill", estilo.buttonBackground)
+                        .attr("stroke", estilo.border);
+                    
+                    boton.select("text")
+                        .attr("fill", estilo.buttonColor)
+                        .text(d.children ? "−" : "+"); // Si d.children existe, está abierto (mostrar -)
+                } else {
+                    boton.style("display", "none"); // Ocultar si es un nodo hoja
+                }
+            });
+
+            // --- Nodos que Salen (Eliminados) ---
+            const nodeExit = node.exit().transition()
+                .duration(transitionDuration)
+                .attr("transform", d => `translate(${source.y},${source.x})`) // Vuelve a la posición del padre
+                .style("opacity", 0)
+                .remove();
+
+            // --- 5. ACTUALIZAR ENLACES (Links) ---
+            const link = g.selectAll("path.arbol-link")
+                .data(links, d => d.target.id);
+
+            // --- Enlaces que Entran (Nuevos) ---
+            const linkEnter = link.enter().insert("path", "g") // Insertar detrás de los nodos
+                .attr("class", "arbol-link")
+                .attr("d", d => {
+                    const o = { x: source.x0, y: source.y0 }; // Posición inicial del padre
+                    return diagonal({ source: o, target: o }); // Dibuja el link desde el padre
+                })
+                .style("stroke-opacity", 0);
+
+            // --- Enlaces que se Actualizan (Transición) ---
+            const linkUpdate = linkEnter.merge(link);
+
+            linkUpdate.transition()
+                .duration(transitionDuration)
+                .attr("d", diagonal) // Anima a la nueva posición
+                .style("stroke-opacity", 1); // Opacidad completa para el color gris
+
+            // --- Enlaces que Salen (Eliminados) ---
+            link.exit().transition()
+                .duration(transitionDuration)
+                .attr("d", d => {
+                    const o = { x: source.x, y: source.y }; // Posición final del padre
+                    return diagonal({ source: o, target: o }); // Anima el link para que colapse en el padre
+                })
+                .style("stroke-opacity", 0)
+                .remove();
+            
+            // 6. Guardar posiciones antiguas para la próxima transición
+            nodes.forEach(d => {
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+        }
+        
+        // 3. Función Click (Toggle)
+        function toggleNodo(event, d) {
+            // No hacer nada si el evento viene de un zoom/drag
+            if (event.defaultPrevented) return; 
+
+            if (d.children) { // Si está abierto, colapsar
+                d._children = d.children;
+                d.children = null;
+            } else if (d._children) { // Si está colapsado, expandir
+                d.children = d._children;
+                d._children = null;
+            }
+            updateArbol(d); // 'd' es el nodo "fuente" de la animación
+        }
+
+        // 4. Generador de Path (Curva de Bézier Horizontal)
+        function diagonal(d) {
+            // Genera el path de la curva
+            return d3.linkHorizontal()
+                     .x(d => d.y) // La 'x' en pantalla es nuestra 'y' en los datos (depth)
+                     .y(d => d.x) // La 'y' en pantalla es nuestra 'x' en los datos (posición vertical)
+                     (d);
+        }
+
+        // 5. (NUEVA PALETA "HERMOSA") Funciones de Estilo 
         function obtenerEstiloNodo(nivel, esTemaDebil) {
-            const estilos = {
-                0: { background: '#9b87f5', border: '#7e69d1', color: 'white', fontSize: '16px', fontWeight: 'bold', borderRadius: '20', buttonBackground: '#7e69d1', buttonColor: 'white' },
-                1: { background: '#a8b5ff', border: '#8fa3ff', color: '#1a1a2e', fontSize: '14px', fontWeight: '600', borderRadius: '16', buttonBackground: '#8fa3ff', buttonColor: 'white' },
-                2: { background: '#7dd3c0', border: '#5cbfab', color: '#1a1a2e', fontSize: '13px', fontWeight: '500', borderRadius: '12', buttonBackground: '#5cbfab', buttonColor: 'white' },
-                3: { background: '#a0e7d4', border: '#7dd3c0', color: '#1a1a2e', fontSize: '12px', fontWeight: 'normal', borderRadius: '8', buttonBackground: '#7dd3c0', buttonColor: 'white' }
+            
+            // Paleta "Hermosa": Nodos blancos, bordes de color Púrpura, Verde y Gris
+            const paleta = {
+                0: { border: '#8E44AD', button: '#7D3C98' }, // Raíz (Púrpura)
+                1: { border: '#2ECC71', button: '#28B463' }, // Nivel 1 (Verde)
+                2: { border: '#2ECC71', button: '#28B463' }, // Nivel 2 (Verde)
+                3: { border: '#BDBDBD', button: '#9E9E9E' }  // Nivel 3 (Gris)
             };
             
-            const estilo = estilos[nivel] || estilos[3];
+            const estiloBase = paleta[nivel] || paleta[3];
             
+            const estilo = {
+                background: '#FFFFFF',          // Fondo blanco para todos
+                border: estiloBase.border,      // Borde de color según nivel
+                borderRadius: '16px',           // Esquinas redondeadas
+                buttonBackground: estiloBase.button,
+                buttonColor: 'white'
+                // El color del texto se maneja en el CSS (.arbol-texto-contenedor)
+            };
+
+            // Override para temas débiles (rojo amigable)
             if (esTemaDebil) {
-                estilo.border = '#dc3545';
-                estilo.background = nivel === 0 ? '#9b87f5' : (nivel === 1 ? '#ffebee' : '#ffcdd2');
+                estilo.border = '#E74C3C'; // Borde rojo suave
+                estilo.buttonBackground = '#C0392B';
             }
             
             return estilo;
         }
 
-        function calcularAnchoNodo(texto) {
-            return Math.max(120, Math.min(300, texto.length * 8 + 40));
-        }
-
-        function toggleNodo(nodoId) {
-            if (arbolState.nodosExpandidos.has(nodoId)) {
-                arbolState.nodosExpandidos.delete(nodoId);
-                colapsarDescendientes(nodoId);
-            } else {
-                arbolState.nodosExpandidos.add(nodoId);
-            }
-            renderizarArbol();
-        }
-
-        function colapsarDescendientes(nodoId) {
-            const hijos = arbolState.nodos.filter(n => n.padre === nodoId);
-            hijos.forEach(hijo => {
-                arbolState.nodosExpandidos.delete(hijo.id);
-                colapsarDescendientes(hijo.id);
-            });
-        }
-
-        function zoomArbol(factor) {
-            arbolState.escala *= factor;
-            aplicarTransformacion();
-        }
-
-        function resetZoomArbol() {
-            arbolState.escala = 1;
-            aplicarTransformacion();
-        }
-
-        function aplicarTransformacion() {
-            const nodesGroup = document.getElementById('arbol-nodes');
-            const linksGroup = document.getElementById('arbol-links');
-            const transform = `scale(${arbolState.escala})`;
-            nodesGroup.setAttribute('transform', transform);
-            linksGroup.setAttribute('transform', transform);
-        }
+        // ============================================
+        // === FIN CÓDIGO D3 v8 (LAYOUT DE ÁRBOL) ===
+        // ============================================
     </script>
 </body>
 </html>
