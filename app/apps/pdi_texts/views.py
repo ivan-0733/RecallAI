@@ -571,21 +571,11 @@ class TrackingViewSet(viewsets.ViewSet):
     """
     permission_classes = [IsAuthenticated]
     
-    @action(detail=False, methods=['post'], url_path='session/start')
+    # URL Final: /api/tracking/session/start/
+    @action(detail=False, methods=['post'], url_path='start')
     def start_session(self, request):
         """
         Inicia una nueva sesión de estudio
-        POST /api/tracking/session/start/
-        
-        Body:
-        {
-            "session_id": "uuid",
-            "material_id": 123,
-            "device_type": "desktop",
-            "browser": "Chrome",
-            "screen_resolution": "1920x1080",
-            "started_at": "2025-01-01T10:00:00Z"
-        }
         """
         data = request.data
         
@@ -620,20 +610,11 @@ class TrackingViewSet(viewsets.ViewSet):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=False, methods=['post'], url_path='session/sync')
+    # URL Final: /api/tracking/session/sync/
+    @action(detail=False, methods=['post'], url_path='sync')
     def sync_session(self, request):
         """
         Sincroniza datos de la sesión activa
-        POST /api/tracking/session/sync/
-        
-        Body:
-        {
-            "session_id": "uuid",
-            "events": [...],
-            "section_times": [...],
-            "heatmap_data": {...},
-            "metrics": {...}
-        }
         """
         data = request.data
         session_id = data.get('session_id')
@@ -655,7 +636,7 @@ class TrackingViewSet(viewsets.ViewSet):
                     event_type=event_data.get('event_type'),
                     element_id=event_data.get('element_id'),
                     element_type=event_data.get('element_type'),
-                    element_text=event_data.get('element_text', '')[:500],  # Truncar
+                    element_text=event_data.get('element_text', '')[:500],
                     x_position=event_data.get('x_position'),
                     y_position=event_data.get('y_position'),
                     scroll_position=event_data.get('scroll_position'),
@@ -739,21 +720,11 @@ class TrackingViewSet(viewsets.ViewSet):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=False, methods=['post'], url_path='session/end')
+    # URL Final: /api/tracking/session/end/
+    @action(detail=False, methods=['post'], url_path='end')
     def end_session(self, request):
         """
         Finaliza una sesión de estudio
-        POST /api/tracking/session/end/
-        
-        Body:
-        {
-            "session_id": "uuid",
-            "ended_at": "2025-01-01T10:30:00Z",
-            "total_time_seconds": 1800,
-            "active_time_seconds": 1500,
-            "exit_type": "normal",
-            "metrics": {...}
-        }
         """
         data = request.data
         session_id = data.get('session_id')
@@ -818,11 +789,11 @@ class TrackingViewSet(viewsets.ViewSet):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=False, methods=['get'], url_path='session/(?P<session_id>[^/.]+)')
+    # URL Final: /api/tracking/session/{uuid}/
+    @action(detail=False, methods=['get'], url_path='(?P<session_id>[^/.]+)')
     def get_session_details(self, request, session_id=None):
         """
         Obtiene detalles completos de una sesión
-        GET /api/tracking/session/{session_id}/
         """
         try:
             session = StudySession.objects.get(
