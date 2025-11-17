@@ -270,6 +270,129 @@
             pointer-events: none;
         }
 
+/* ============================================
+           === ESTILOS PARA EL RESUMEN ESTRUCTURADO ===
+           ============================================ */
+        
+        /* Contenedor general: AHORA OCUPA TODO EL ANCHO */
+        .summary-container {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            width: 100%;           /* Ocupar todo el ancho disponible */
+            max-width: 100%;       /* Asegurar que no se limite */
+            margin: 0;             /* Sin márgenes externos extras */
+            box-sizing: border-box;
+        }
+
+        /* Títulos */
+        .summary-container h1 {
+            color: #2c3e50;
+            font-size: 2rem;
+            border-bottom: 3px solid #2c3e50;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            text-align: left; /* Alineado a la izquierda para look académico */
+        }
+
+        .summary-container h2 {
+            color: #34495e;
+            font-size: 1.5rem;
+            margin-top: 25px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        .summary-container h3 {
+            color: #555;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            font-weight: 600;
+        }
+
+        /* --- SECCIONES (Ahora con ancho completo y mejor padding) --- */
+        .weak-section {
+            background-color: #fff;
+            border-left: 6px solid #e74c3c;
+            padding: 30px; /* Más espacio interno */
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-radius: 4px;
+        }
+        
+        .review-section {
+            background-color: #f8f9fa;
+            border-left: 6px solid #27ae60;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+        }
+
+        /* --- TABLAS DE COMPARACIÓN (NUEVO Y CRÍTICO) --- */
+        /* Esto arregla el texto amontonado "Lo Incorrecto Lo Correcto" */
+        .comparison-table, .summary-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+        }
+
+        .comparison-table th, .summary-container th {
+            background-color: #f1f2f6;
+            color: #2c3e50;
+            font-weight: 600;
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .comparison-table td, .summary-container td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+        }
+
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* --- BLOQUES DE CÓDIGO ROBUSTOS --- */
+        .code-block {
+            background-color: #282c34;
+            border-radius: 6px;
+            margin: 20px 0;
+            padding: 15px;
+            overflow-x: auto; /* Scroll horizontal si es necesario */
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            color: #abb2bf;
+            white-space: pre-wrap; /* Ajuste de línea automático (evita scroll excesivo) */
+            word-wrap: break-word;
+        }
+
+        /* --- LISTAS Y TEXTO --- */
+        .summary-container ul {
+            padding-left: 20px;
+        }
+        
+        .summary-container li {
+            margin-bottom: 8px;
+        }
+        
+        .summary-container p {
+            margin-bottom: 15px;
+            text-align: left; /* Justificado o izquierda se lee mejor en ancho completo */
+        }
+
+        /* Indicadores visuales de sección */
+        .weak-section h2::before { content: "⚠️ REFUERZO: "; opacity: 0.7; font-size: 0.9em; }
+        .review-section h2::before { content: "✓ REPASO: "; opacity: 0.7; font-size: 0.9em; }
+
     </style>
 </head>
 <body>
@@ -418,15 +541,24 @@
             // === FIN LÓGICA MAPA ===
 
             // Lógica para Flashcards/Otros
+            // Lógica para Flashcards/Otros
             let cleanHTML;
-            if (material.material_type === 'flashcard') {
-                cleanHTML = material.html_content;
-            } else {
-                cleanHTML = DOMPurify.sanitize(material.html_content, {
-                    ADD_TAGS: ['style', 'script'],
-                    ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
-                });
-            }
+                        if (material.material_type === 'flashcard') {
+                            cleanHTML = material.html_content;
+                        } else if (material.material_type === 'summary') {
+                            // MODIFICACIÓN: Envolver en container de estilos y sanitizar
+                            const rawHTML = DOMPurify.sanitize(material.html_content, {
+                                ADD_TAGS: ['style', 'h1', 'h2', 'h3', 'div', 'span', 'p', 'ul', 'li', 'strong', 'em', 'code', 'pre', 'table', 'thead', 'tbody', 'tr', 'td', 'th'],
+                                ADD_ATTR: ['class', 'style', 'id']
+                            });
+                            // Inyectamos el wrapper aquí para asegurar que tome el CSS
+                            cleanHTML = `<div class="summary-container">${rawHTML}</div>`;
+                        } else {
+                            cleanHTML = DOMPurify.sanitize(material.html_content, {
+                                ADD_TAGS: ['style', 'script'],
+                                ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
+                            });
+                        }
 
             $('#loadingSpinner').hide();
             const contentDiv = $('#materialContent');

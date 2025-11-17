@@ -506,55 +506,44 @@ Responde SOLO con HTML completo, sin explicaciones."""
 
 
 def get_summary_prompt(text_title, text_topic, weak_topics, review_topics, incorrect_questions_text, score, text_content_preview):
-    """Prompt para Resumen Estructurado"""
+    """
+    Genera un resumen académico estructurado HTML de alto nivel (FULL WIDTH).
+    """
     
-    # Se definen los strings de temas
-    weak_topics_str = ", ".join(weak_topics) if weak_topics else "Ninguno"
-    review_topics_str = ", ".join(review_topics) if review_topics else "Ninguno"
+    weak_topics_str = ", ".join(weak_topics) if weak_topics else "Ninguno (Enfoque general avanzado)"
+    review_topics_str = ", ".join(review_topics) if review_topics else "Conceptos generales"
     
-    return f"""Crea un resumen estructurado en HTML sobre: {text_title}
+    return f"""Actúa como un profesor universitario y genera un "Resumen de Estudio" en formato HTML estricto.
+    
+TÍTULO OBLIGATORIO DEL DOCUMENTO: "Resumen de Estudio: {text_title}"
 
-SCORE: {score}%
-TEMAS DÉBILES (ERRORES): {weak_topics_str}
-TEMAS DE REPASO (GENERALES): {review_topics_str}
+DATOS DEL ALUMNO:
+- Temas Débiles: {weak_topics_str}
+- Temas de Repaso: {review_topics_str}
+- Errores cometidos: {incorrect_questions_text}
 
-INSTRUCCIONES CRÍTICAS DE ESTRUCTURA (LÓGICA 75/25):
-El resumen debe tener las siguientes secciones, respetando la proporción de contenido:
+INSTRUCCIONES DE ESTRUCTURA (LÓGICA 75/25):
 
-1.  **DONDE NECESITAS REFORZAR (75% del contenido)**
-    * Esta es la sección principal. Enfócate en explicar detalladamente los temas débiles: {weak_topics_str}
-    * Usa los errores específicos del alumno como contexto:
-        {incorrect_questions_text}
-    * Proporciona explicaciones claras, ejemplos de código Python comentados y cómo evitar esos errores.
-    * Usa un fondo o borde ROJO/ROSADO para esta sección.
+1.  **MÓDULO DE REFUERZO PRIORITARIO (75%)**
+    * **Objetivo:** Corregir los temas débiles ({weak_topics_str}).
+    * **Formato:** Explicaciones técnicas profundas.
+    * **REQUISITO CRÍTICO (TABLAS):** Para cada error conceptual, DEBES crear una tabla HTML (`<table>`) de dos columnas comparando "Lo Incorrecto (Tu Error)" vs "Lo Correcto (La Realidad)". NO uses texto plano para esto.
+    * **REQUISITO CÓDIGO:** Si el tema es técnico/programación, incluye bloques de código (`<pre><code class="language-python">...</code></pre>`).
 
-2.  **REPASO RÁPIDO DE CONCEPTOS (25% del contenido)**
-    * Esta sección es para repasar temas generales y mantenerlos frescos.
-    * Enfócate en: {review_topics_str}
-    * Usa bullet points o listas breves. No necesita ser tan detallado como la sección de refuerzo.
-    * Usa un fondo o borde VERDE/AZULADO para esta sección.
+2.  **MÓDULO DE MANTENIMIENTO DE CONOCIMIENTOS (25%)**
+    * **Objetivo:** Repaso rápido de {review_topics_str}.
+    * **Formato:** Listas compactas (`<ul>`) o tablas resumen.
 
-(El resumen debe mezclar estas dos secciones, pero manteniendo la proporción 75/25. El formato original 60/20/20 de abajo ya no aplica, usa el 75/25 de arriba)
+REGLAS TÉCNICAS DE GENERACIÓN (HTML):
+1.  Responde SOLO con el HTML (sin ```html, sin markdown).
+2.  NO uses estilos inline complejos (el CSS ya está cargado en la web).
+3.  NO uses emojis. Tono académico serio.
+4.  **Clases CSS OBLIGATORIAS:**
+    -   `<div class="summary-section weak-section">` para el 75%.
+    -   `<div class="summary-section review-section">` para el 25%.
+    -   `<table class="comparison-table">` para las tablas de corrección.
+    -   `<div class="code-block">` para envolver los `<pre>`.
 
-
-ESTRUCTURA (60% en temas débiles): (Esta línea se ignora, se prioriza el 75/25)
-
-1. CONCEPTOS ESENCIALES (20%)
-- Lista breve de 5-7 conceptos clave
-
-2. DONDE NECESITAS REFORZAR (60%)
-- Sección principal con explicaciones detalladas
-- Código Python con comentarios
-- Referencias a errores específicos del alumno
-- Cómo evitarlo
-
-3. REPASO RÁPIDO (20%)
-- Bullet points de temas que sí domina
-
-Genera HTML con:
-- Header con gradiente morado
-- Secciones con colores: azul (conceptos), rojo (débiles), verde (dominados)
-- Tablas de referencia
-- CSS inline
-
-Responde SOLO con HTML completo, sin explicaciones."""
+CONTENIDO BASE:
+{text_content_preview[:2000]}
+"""
