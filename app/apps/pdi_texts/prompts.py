@@ -337,6 +337,11 @@ REGLAS CRÍTICAS:
 8. **(MODIFICADO) Profundidad (¡REGLA CRÍTICA!):**
    - **TODAS las ramas (débiles y de repaso)** DEBEN desarrollarse con el mismo nivel de detalle.
    - NO crees ramas de repaso (verdes) superficiales. Deben llegar al **Nivel 3** con la misma calidad y detalle que las ramas de temas débiles (rojas).
+
+REGLAS TÉCNICAS DE ORO (CRÍTICO PARA D3.JS - NO IGNORAR):
+9. **LISTA PLANA OBLIGATORIA:** No uses "children" ni estructuras anidadas dentro de los objetos. Devuelve una lista plana.
+10. **INTEGRIDAD DE REFERENCIAS:** El valor del campo "padre" de un nodo DEBE coincidir carácter por carácter (case-sensitive) con el "id" de un nodo existente en la lista.
+11. **RAÍZ ÚNICA:** Solo puede haber EXACTAMENTE UN nodo con "padre": null.
 (--- FIN DE LA MODIFICACIÓN ---)
 
 

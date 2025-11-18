@@ -161,8 +161,68 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
             import json
             try:
                 parsed_json = json.loads(html_content)
+                
+                # --- INICIO CORRECCIÓN DE INTEGRIDAD PARA D3.JS (SOLUCIÓN AL ERROR DE JERARQUÍA) ---
+                # D3.stratify es estricto: IDs sin espacios, referencias de padre existentes y una única raíz.
+                if 'datos' in parsed_json and 'nodos' in parsed_json['datos']:
+                    nodos = parsed_json['datos']['nodos']
+                    
+                    # 1. Recopilar todos los IDs válidos (limpiando espacios invisibles)
+                    ids_validos = set()
+                    for n in nodos:
+                        if 'id' in n:
+                            n['id'] = str(n['id']).strip() 
+                            ids_validos.add(n['id'])
+                    
+                    # 2. Corregir padres, referencias rotas y formato de null
+                    raiz_encontrada = False
+                    nodos_limpios = []
+                    
+                    for n in nodos:
+                        padre_raw = n.get('padre')
+                        
+                        # Caso: Nodo Raíz (null, None, "null" texto, o vacío)
+                        if padre_raw is None or str(padre_raw).lower() in ['null', 'none', ''] or n['id'] == 'raiz':
+                            n['padre'] = None # Null real de Python/JSON
+                            # Forzar ID raiz estándar si es posible para evitar duplicados
+                            if not raiz_encontrada:
+                                raiz_encontrada = True
+                            else:
+                                # Si ya hay una raiz, convertir esta en hija de la primera raiz para no romper D3
+                                n['padre'] = 'raiz' if 'raiz' in ids_validos and n['id'] != 'raiz' else None
+                        else:
+                            # Caso: Nodo Hijo
+                            padre_limpio = str(padre_raw).strip()
+                            
+                            # Verificar si el padre existe realmente en la lista de IDs
+                            if padre_limpio in ids_validos:
+                                n['padre'] = padre_limpio
+                            else:
+                                # Si el padre no existe (alucinación de Gemini), lo conectamos a la raiz para salvarlo
+                                logger.warning(f"⚠️ Reparando nodo huérfano {n.get('id')}: padre '{padre_limpio}' no existe. Re-conectando.")
+                                n['padre'] = 'raiz' if 'raiz' in ids_validos else None
+                                if n['padre'] is None: raiz_encontrada = True # Se convirtió en raiz por defecto
+
+                        # Evitar ciclos
+                        if n.get('padre') == n.get('id'):
+                             n['padre'] = 'raiz' if n.get('id') != 'raiz' else None
+
+                        nodos_limpios.append(n)
+                        
+                    # 3. Seguridad final: Si D3 no encuentra una raíz explícita, forzar al primer nodo
+                    if not raiz_encontrada and nodos_limpios:
+                        logger.warning("⚠️ No se detectó nodo raiz explícito. Forzando el primer nodo como raiz.")
+                        nodos_limpios[0]['padre'] = None
+                        # Asegurar que tenga un ID común si es posible, o dejar el que tiene
+                        if 'raiz' not in ids_validos:
+                            nodos_limpios[0]['id'] = 'raiz'
+                        
+                    parsed_json['datos']['nodos'] = nodos_limpios
+                # --- FIN CORRECCIÓN ---
+
                 html_content = json.dumps(parsed_json, ensure_ascii=False, indent=2)
-                logger.info(f"✅ JSON del árbol validado")
+                logger.info(f"✅ JSON del árbol validado y sanitizado para D3")
+                
             except json.JSONDecodeError as e:
                 logger.error(f"❌ Error validando JSON del árbol: {e}")
                 import re
@@ -189,9 +249,6 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         
         generation_time = int(time.time() - start_time)
         
-# En la sección donde se cuenta los nodos (alrededor de la línea donde dice "✅ LÓGICA NUEVA: CONTAR NODOS ANTES DE GUARDAR")
-# Reemplaza toda esa sección con:
-
         # ------------------------------------------------------------------
         # ✅ LÓGICA NUEVA: CONTAR SOLO NODOS PADRES (Niveles 0, 1, 2)
         # ------------------------------------------------------------------
