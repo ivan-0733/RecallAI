@@ -189,33 +189,86 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         
         generation_time = int(time.time() - start_time)
         
+# En la sección donde se cuenta los nodos (alrededor de la línea donde dice "✅ LÓGICA NUEVA: CONTAR NODOS ANTES DE GUARDAR")
+# Reemplaza toda esa sección con:
+
         # ------------------------------------------------------------------
-        # ✅ LÓGICA NUEVA: CONTAR NODOS ANTES DE GUARDAR
+        # ✅ LÓGICA NUEVA: CONTAR SOLO NODOS PADRES (Niveles 0, 1, 2)
         # ------------------------------------------------------------------
         
         total_nodes = 0
         total_flashcards = 0
         
         try:
-            soup = BeautifulSoup(clean_html, 'html.parser')
-            
             if material_type == 'flashcard':
-                # Contar divs con clase 'flashcard'
+                # Para flashcards: contar divs con clase 'flashcard'
+                soup = BeautifulSoup(clean_html, 'html.parser')
                 flashcard_elements = soup.find_all('div', class_='flashcard')
                 total_flashcards = len(flashcard_elements) if flashcard_elements else 20
                 logger.info(f"📇 Flashcards detectadas para guardar: {total_flashcards}")
                 
-            elif material_type in ['decision_tree', 'mind_map']:
-                # Contar nodos (excluyendo raíz)
-                all_nodes = soup.find_all('g', class_='arbol-nodo')
-                if not all_nodes:
-                    all_nodes = soup.find_all(attrs={'data-node': True})
-                if not all_nodes:
-                    all_nodes = soup.find_all('div', class_='node')
-                
-                # Si hay nodos, restamos 1 (la raíz), si no, 15 por defecto
-                total_nodes = max(1, len(all_nodes) - 1) if all_nodes else 15
-                logger.info(f"🌳 Nodos detectados para guardar en {material_type}: {total_nodes}")
+            elif material_type == 'decision_tree':
+                # Para árbol de decisión: contar solo nodos padres del JSON
+                import json
+                try:
+                    tree_data = json.loads(clean_html)
+                    if 'datos' in tree_data and 'nodos' in tree_data['datos']:
+                        # Contar solo nodos con nivel 0, 1 o 2 (excluir nivel 3)
+                        parent_nodes = [
+                            nodo for nodo in tree_data['datos']['nodos'] 
+                            if nodo.get('nivel', 0) < 3
+                        ]
+                        total_nodes = len(parent_nodes)
+                        logger.info(f"🌳 Nodos padres detectados (niveles 0-2): {total_nodes}")
+                        
+                        # Log detallado para debugging
+                        levels_count = {}
+                        for nodo in tree_data['datos']['nodos']:
+                            nivel = nodo.get('nivel', 0)
+                            levels_count[nivel] = levels_count.get(nivel, 0) + 1
+                        logger.info(f"📊 Distribución por niveles: {levels_count}")
+                    else:
+                        total_nodes = 15  # Default si no hay estructura válida
+                        logger.warning("⚠️ Estructura JSON inválida, usando default 15")
+                        
+                except json.JSONDecodeError as e:
+                    logger.error(f"❌ Error parseando JSON del árbol: {e}")
+                    total_nodes = 15  # Default en caso de error
+                    
+            elif material_type == 'mind_map':
+                # Para mapa mental: intentar parsear si es JSON, sino contar elementos HTML
+                try:
+                    import json
+                    mind_map_data = json.loads(clean_html)
+                    if 'datos' in mind_map_data and 'nodos' in mind_map_data['datos']:
+                        # Similar al árbol, contar solo nodos padres
+                        parent_nodes = [
+                            nodo for nodo in mind_map_data['datos']['nodos'] 
+                            if nodo.get('nivel', 0) < 3
+                        ]
+                        total_nodes = len(parent_nodes)
+                        logger.info(f"🧠 Nodos padres mapa mental (niveles 0-2): {total_nodes}")
+                    else:
+                        # Si no es JSON estructurado, contar elementos HTML
+                        soup = BeautifulSoup(clean_html, 'html.parser')
+                        all_nodes = soup.find_all('g', class_='arbol-nodo')
+                        if not all_nodes:
+                            all_nodes = soup.find_all(attrs={'data-node': True})
+                        if not all_nodes:
+                            all_nodes = soup.find_all('div', class_='node')
+                        total_nodes = max(1, len(all_nodes) - 1) if all_nodes else 15
+                        logger.info(f"🧠 Nodos HTML detectados en mapa mental: {total_nodes}")
+                        
+                except (json.JSONDecodeError, ValueError):
+                    # No es JSON, contar elementos HTML
+                    soup = BeautifulSoup(clean_html, 'html.parser')
+                    all_nodes = soup.find_all('g', class_='arbol-nodo')
+                    if not all_nodes:
+                        all_nodes = soup.find_all(attrs={'data-node': True})
+                    if not all_nodes:
+                        all_nodes = soup.find_all('div', class_='node')
+                    total_nodes = max(1, len(all_nodes) - 1) if all_nodes else 15
+                    logger.info(f"🧠 Nodos HTML en mapa mental: {total_nodes}")
                 
         except Exception as e:
             logger.error(f"Error contando nodos/flashcards: {e}")
@@ -237,12 +290,13 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
             requested_at=timezone.now(),
             generated_at=timezone.now(),
             generation_time_seconds=generation_time,
-            # AQUÍ GUARDAMOS LA CUENTA REAL
+            # AQUÍ GUARDAMOS LA CUENTA REAL DE NODOS PADRES
             total_nodes=total_nodes,
             total_flashcards=total_flashcards
         )
         
-        logger.info(f"Material generado exitosamente (ID: {material.id}). Totales guardados -> Nodos: {total_nodes}, Cards: {total_flashcards}")
+        logger.info(f"Material generado exitosamente (ID: {material.id})")
+        logger.info(f"📊 Totales guardados -> Nodos padres: {total_nodes}, Flashcards: {total_flashcards}")
         
         return {
             'status': 'success',
