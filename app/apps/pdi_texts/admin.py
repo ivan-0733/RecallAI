@@ -550,6 +550,7 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
         'material_type_badge',
         'user_link',
         'text_link',
+        'quiz_origin_display',
         'stats_summary_columns',
         'created_at_formatted',
         'was_effective_icon'
@@ -597,7 +598,7 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
             'fields': ('user', 'text', 'material_type', 'requested_at', 'generated_at', 'generation_time_seconds')
         }),
         ('🔗 Quiz de Origen', {
-            'fields': ('attempt', 'associated_quiz_link_detailed'),
+            'fields': ('attempt',),
             'description': 'El intento de quiz que originó este material didáctico.'
         }),
         ('📝 Contenido HTML', {
@@ -637,6 +638,15 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
             url, obj.user.email
         )
     user_link.short_description = 'Usuario'
+    
+    def quiz_origin_display(self, obj):
+        if obj.attempt:
+            # Formato solicitado: TITULO - Intento #N (SCORE%)
+            return f"{obj.text.title} - Intento #{obj.attempt.attempt_number} ({obj.attempt.score}%)"
+        return "-"
+    
+    quiz_origin_display.short_description = 'Quiz Origin'
+    quiz_origin_display.admin_order_field = 'attempt__score'
 
     def text_link(self, obj):
         from django.urls import reverse

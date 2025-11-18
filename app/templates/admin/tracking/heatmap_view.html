@@ -3,421 +3,457 @@
 
 {% block extrastyle %}
 {{ block.super }}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+
 <style>
-    .heatmap-container {
-        position: relative;
-        width: 100%;
+    /* --- ESTILOS GENERALES Y LAYOUT --- */
+    .dashboard-container {
         max-width: 1200px;
         margin: 0 auto;
-        background: #f5f5f5;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #333;
     }
-    
-    .heatmap-canvas {
-        width: 100%;
-        display: block;
-    }
-    
-    .click-point {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(255,0,0,0.8) 0%, rgba(255,0,0,0.3) 50%, rgba(255,0,0,0) 100%);
-        pointer-events: none;
-        transform: translate(-50%, -50%);
-    }
-    
-    .hot-zone {
-        position: absolute;
-        border: 2px solid rgba(255,0,0,0.5);
-        background: rgba(255,0,0,0.2);
-        border-radius: 4px;
-        pointer-events: none;
-    }
-    
+
+    /* Panel de Información */
     .info-panel {
-        background: white;
+        background: #fff;
         padding: 20px;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        border: 1px solid #e0e0e0;
         margin-bottom: 20px;
     }
-    
-    .legend {
-        display: flex;
-        gap: 20px;
-        align-items: center;
-        margin-top: 20px;
+
+    .info-panel h2 {
+        margin-top: 0;
+        color: #2c3e50;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+        font-size: 18px;
     }
-    
-    .legend-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+
+    .info-panel p {
+        line-height: 1.6;
+        color: #555;
+        margin: 0;
     }
-    
-    .legend-color {
-        width: 30px;
-        height: 20px;
-        border-radius: 4px;
-    }
-    
+
+    /* Grid de Estadísticas */
     .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin-bottom: 20px;
+        gap: 20px;
+        margin-bottom: 30px;
     }
-    
+
     .stat-card {
-        background: white;
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        border: 1px solid #e0e0e0;
+        text-align: center;
+    }
+
+    .stat-card h4 {
+        margin: 0 0 10px 0;
+        font-size: 14px;
+        text-transform: uppercase;
+        color: #888;
+        letter-spacing: 0.5px;
+    }
+
+    .stat-card .value {
+        font-size: 28px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+
+    /* --- CONTROLES --- */
+    .controls-module {
+        background: #f8f9fa;
         padding: 15px;
         border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border: 1px solid #ddd;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 30px;
+        flex-wrap: wrap;
     }
-    
-    .stat-card h4 {
-        margin: 0 0 5px 0;
-        font-size: 14px;
-        color: #666;
+
+    .control-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
+
+    .control-group label { font-weight: bold; color: #444; }
+    .control-group select, .control-group input[type="range"] {
+        padding: 5px; border: 1px solid #ccc; border-radius: 4px;
+    }
+
+    /* --- HEATMAP WRAPPER --- */
+    .heatmap-wrapper {
+        position: relative;
+        width: 100%;
+        background: #fff;
+        border: 1px solid #ccc;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    /* CAPA 1: Contenedor del Material */
+    .material-content-layer {
+        position: relative;
+        width: 100%;
+        padding: 60px; /* Espaciado generoso */
+        box-sizing: border-box;
+        z-index: 1;
+        min-height: 800px;
+        background: #ffffff;
+        /* Reset de fuentes para aislar del Admin de Django */
+        font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        color: #212529;
+    }
+
+    /* Header del Material */
+    .material-header { text-align: center; margin-bottom: 50px; }
+    .material-header h1 { 
+        font-size: 2.5em; margin-bottom: 15px; color: #2c3e50; 
+        font-weight: 700; letter-spacing: -0.5px; line-height: 1.2;
+    }
+    .material-meta { display: flex; justify-content: center; gap: 15px; align-items: center; }
+    .material-meta .badge { 
+        background: #e9ecef; color: #495057; padding: 6px 12px; 
+        border-radius: 20px; font-size: 0.85em; font-weight: 600; 
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .material-meta .topic { color: #6c757d; font-style: italic; font-size: 1.1em; }
+    .material-header hr { margin-top: 30px; border: 0; border-top: 1px solid #eee; }
+
+    /* --- ESTILOS DE CONTENIDO PROFUNDO (Renderizado de HTML) --- */
+    .content-render-area { max-width: 100%; }
     
-    .stat-card .value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #333;
+    /* Tipografía del contenido */
+    .content-render-area h1, .content-render-area h2, .content-render-area h3, 
+    .content-render-area h4, .content-render-area h5 {
+        color: #2c3e50; margin-top: 1.5em; margin-bottom: 0.5em; font-weight: 600;
+    }
+    .content-render-area h2 { font-size: 1.8em; border-bottom: 2px solid #f0f0f0; padding-bottom: 0.3em; }
+    .content-render-area h3 { font-size: 1.4em; }
+    
+    .content-render-area p { margin-bottom: 1em; text-align: justify; }
+    .content-render-area ul, .content-render-area ol { margin-bottom: 1em; padding-left: 2em; }
+    .content-render-area li { margin-bottom: 0.5em; }
+    
+    /* Elementos especiales */
+    .content-render-area blockquote {
+        border-left: 5px solid #3498db; background: #f8f9fa;
+        padding: 15px 20px; margin: 20px 0; font-style: italic; color: #555;
+    }
+    .content-render-area code {
+        background: #f1f2f6; padding: 2px 6px; border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace; color: #e74c3c; font-size: 0.9em;
+    }
+    .content-render-area pre {
+        background: #2d3436; padding: 15px; border-radius: 8px;
+        overflow-x: auto; color: #dfe6e9; margin: 20px 0;
+    }
+    .content-render-area img {
+        max-width: 100%; height: auto; border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin: 20px auto; display: block;
+    }
+
+    /* Flashcards */
+    .flashcard {
+        perspective: 1000px; margin: 30px auto; max-width: 600px; cursor: default;
+    }
+    .flashcard-inner {
+        border: 1px solid #e0e0e0; padding: 30px; border-radius: 12px;
+        background: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        text-align: center; transition: transform 0.6s;
+    }
+    .flashcard-inner h3 { margin-top: 0; color: #3498db; }
+
+    /* CAPA 2: Canvas Transparente */
+    .heatmap-canvas-layer {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        z-index: 10; pointer-events: none;
+    }
+
+    /* --- LEYENDA Y TABLAS --- */
+    .legend {
+        display: flex; gap: 20px; align-items: center; margin-top: 15px;
+        padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 4px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #555; }
+    .legend-color { width: 30px; height: 18px; border-radius: 3px; }
+
+    /* Tablas */
+    .table-wrapper { margin-top: 30px; background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; }
+    table.custom-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    table.custom-table th { text-align: left; padding: 12px; border-bottom: 2px solid #eee; color: #555; font-weight: 600; }
+    table.custom-table td { padding: 12px; border-bottom: 1px solid #eee; color: #444; }
+
+    /* Barra de progreso */
+    .progress-container { background: #e9ecef; border-radius: 4px; height: 20px; width: 100%; overflow: hidden; }
+    .progress-bar-fill {
+        height: 100%; background-color: #dc3545; color: white; font-size: 11px; font-weight: bold;
+        display: flex; align-items: center; justify-content: center; transition: width 0.6s ease;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<h1>🔥 Heatmap de Interacciones</h1>
+<div class="dashboard-container">
+    <h1>🔥 Heatmap de Interacciones</h1>
 
-<div class="breadcrumbs">
-    <a href="{% url 'admin:pdi_texts_studysession_changelist' %}">Sesiones de Estudio</a>
-    › <a href="{% url 'admin:pdi_texts_studysession_change' session.pk %}">Sesión {{ session.session_id|slice:":8" }}</a>
-    › Heatmap
-</div>
+    <div class="breadcrumbs" style="margin-bottom: 20px;">
+        <a href="{% url 'admin:pdi_texts_studysession_changelist' %}">Sesiones de Estudio</a>
+        › <a href="{% url 'admin:pdi_texts_studysession_change' session.pk %}">Sesión {{ session.session_id|slice:":8" }}</a>
+        › Heatmap
+    </div>
 
-<!-- Panel de Información -->
-<div class="info-panel">
-    <h2>Información de la Sesión</h2>
-    <p>
-        <strong>Usuario:</strong> {{ session.user.email }}<br>
-        <strong>Material:</strong> {{ session.material.text.title }}<br>
-        <strong>Fecha:</strong> {{ session.started_at|date:"d/m/Y H:i" }}<br>
-        <strong>Duración:</strong> {{ session.duration_formatted }}<br>
-        <strong>Engagement Score:</strong> {{ session.engagement_score|floatformat:1 }}%
-    </p>
-</div>
+    <div class="info-panel">
+        <h2>Información de la Sesión</h2>
+        <p>
+            <strong>Usuario:</strong> {{ session.user.email }}<br>
+            <strong>Material:</strong> {{ session.material.text.title }}<br>
+            <strong>Fecha:</strong> {{ session.started_at|date:"d/m/Y H:i" }}<br>
+            <strong>Duración:</strong> {{ session.duration_formatted }}<br>
+            <strong>Engagement Score:</strong> {{ session.engagement_score|floatformat:1 }}%
+        </p>
+    </div>
 
-<!-- Estadísticas Rápidas -->
-<div class="stats-grid">
-    <div class="stat-card">
-        <h4>Total de Clics</h4>
-        <div class="value">{{ heatmap.clicks|length }}</div>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h4>Total de Clics</h4>
+            <div class="value">{{ heatmap.clicks|length }}</div>
+        </div>
+        
+        <div class="stat-card">
+            <h4>Movimientos Mouse</h4>
+            <div class="value">{{ heatmap.mouse_movements|length }}</div>
+        </div>
+        
+        <div class="stat-card">
+            <h4>Puntos de Scroll</h4>
+            <div class="value">{{ heatmap.scroll_points|length }}</div>
+        </div>
+        
+        <div class="stat-card">
+            <h4>Zonas Calientes</h4>
+            <div class="value">{{ heatmap.hot_zones|length }}</div>
+        </div>
     </div>
-    
-    <div class="stat-card">
-        <h4>Movimientos del Mouse</h4>
-        <div class="value">{{ heatmap.mouse_movements|length }}</div>
-    </div>
-    
-    <div class="stat-card">
-        <h4>Puntos de Scroll</h4>
-        <div class="value">{{ heatmap.scroll_points|length }}</div>
-    </div>
-    
-    <div class="stat-card">
-        <h4>Zonas Calientes</h4>
-        <div class="value">{{ heatmap.hot_zones|length }}</div>
-    </div>
-</div>
 
-<!-- Controles -->
-<div class="module" style="margin-bottom: 20px;">
-    <div class="form-row">
-        <div class="form-group">
+    <div class="controls-module">
+        <div class="control-group">
             <label>Visualización:</label>
-            <select id="visualizationType" class="form-control" style="width: 200px; display: inline-block;">
+            <select id="visualizationType">
                 <option value="clicks">Clics</option>
-                <option value="mouse">Movimiento del Mouse</option>
+                <option value="mouse">Rastro del Mouse</option>
                 <option value="hot_zones">Zonas Calientes</option>
                 <option value="all">Todos</option>
             </select>
         </div>
         
-        <div class="form-group" style="margin-left: 20px;">
+        <div class="control-group">
             <label>Opacidad:</label>
-            <input type="range" id="opacitySlider" min="0" max="100" value="70" style="width: 200px;">
+            <input type="range" id="opacitySlider" min="0" max="100" value="70">
             <span id="opacityValue">70%</span>
         </div>
     </div>
-</div>
 
-<!-- Contenedor del Heatmap -->
-<div class="heatmap-container" id="heatmapContainer">
-    <canvas id="heatmapCanvas" class="heatmap-canvas" width="1200" height="800"></canvas>
-    <div id="clickPointsLayer"></div>
-    <div id="hotZonesLayer"></div>
-</div>
+    <div class="heatmap-wrapper" id="heatmapContainer">
+        
+        <div class="material-content-layer" id="materialContent">
+            <div class="material-header">
+                <h1>{{ session.material.text.title }}</h1>
+                <div class="material-meta">
+                    <span class="badge">{{ session.material.get_material_type_display }}</span>
+                    <span class="topic">{{ session.material.text.topic }}</span>
+                </div>
+                <hr>
+            </div>
 
-<!-- Leyenda -->
-<div class="legend">
-    <h3>Leyenda:</h3>
-    <div class="legend-item">
-        <div class="legend-color" style="background: linear-gradient(to right, rgba(255,0,0,0.2), rgba(255,0,0,0.8));"></div>
-        <span>Intensidad de Clics (baja → alta)</span>
+            <div class="content-render-area">
+                {{ session.material.html_content|safe }}
+            </div>
+        </div>
+
+        <canvas id="heatmapCanvas" class="heatmap-canvas-layer"></canvas>
     </div>
-    <div class="legend-item">
-        <div class="legend-color" style="background: rgba(0,0,255,0.3); border: 2px solid rgba(0,0,255,0.6);"></div>
-        <span>Zonas Calientes</span>
-    </div>
-</div>
 
-<!-- Top Zonas Calientes -->
-{% if heatmap.hot_zones %}
-<div class="module" style="margin-top: 30px;">
-    <h2>🔥 Top 10 Zonas Más Calientes</h2>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Posición (X, Y)</th>
-                <th>Tamaño</th>
-                <th>Intensidad</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for zone in heatmap.hot_zones|slice:":10" %}
-            <tr>
-                <td>{{ forloop.counter }}</td>
-                <td>({{ zone.x }}, {{ zone.y }})</td>
-                <td>{{ zone.width }} × {{ zone.height }}</td>
-                <td>
-                    <div class="progress">
-                        <div class="progress-bar bg-danger" role="progressbar" style="width: {{ zone.intensity }}%">
-                            {{ zone.intensity|floatformat:1 }}%
+    <div class="legend">
+        <strong>Leyenda:</strong>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(to right, rgba(255,0,0,0.2), rgba(255,0,0,0.8));"></div>
+            <span>Intensidad de Clics</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgba(0,0,255,0.3); border: 2px solid rgba(0,0,255,0.6);"></div>
+            <span>Zonas Calientes</span>
+        </div>
+    </div>
+
+    {% if heatmap.hot_zones %}
+    <div class="table-wrapper">
+        <h2>🔥 Top 10 Zonas Más Calientes</h2>
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Posición (X, Y)</th>
+                    <th>Tamaño</th>
+                    <th>Intensidad</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for zone in heatmap.hot_zones|slice:":10" %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>({{ zone.x }}, {{ zone.y }})</td>
+                    <td>{{ zone.width }} × {{ zone.height }} px</td>
+                    <td style="width: 200px;">
+                        <div class="progress-container">
+                            <div class="progress-bar-fill" style="width: {{ zone.intensity }}%">
+                                {{ zone.intensity|floatformat:0 }}%
+                            </div>
                         </div>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </div>
-{% endif %}
-
 {% endblock %}
 
 {% block extrajs %}
 {{ block.super }}
+
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+
+{{ heatmap.clicks|json_script:"heatmap-clicks-data" }}
+{{ heatmap.mouse_movements|json_script:"heatmap-mouse-data" }}
+{{ heatmap.hot_zones|json_script:"heatmap-zones-data" }}
+
 <script>
 (function() {
-    // ✅ CORRECCIÓN PROBLEMA 3: Parsear JSON correctamente con |safe filter
-    // Los datos vienen ya como strings JSON desde el backend
-    
-    let clicks, mouseMovements, hotZones;
-    
+    // Configuración inicial de librerías
+    if (typeof mermaid !== 'undefined') mermaid.initialize({ startOnLoad: true });
+    if (typeof hljs !== 'undefined') hljs.highlightAll();
+
+    // Cargar datos
+    let clicks = [], mouseMovements = [], hotZones = [];
     try {
-        // Los datos ya vienen serializados como JSON strings, solo necesitamos parsearlos
-        clicks = JSON.parse('{{ heatmap_data.clicks|safe }}');
-        mouseMovements = JSON.parse('{{ heatmap_data.mouse_movements|safe }}');
-        hotZones = JSON.parse('{{ heatmap_data.hot_zones|safe }}');
+        const cEl = document.getElementById('heatmap-clicks-data');
+        const mEl = document.getElementById('heatmap-mouse-data');
+        const zEl = document.getElementById('heatmap-zones-data');
+        if (cEl) clicks = JSON.parse(cEl.textContent);
+        if (mEl) mouseMovements = JSON.parse(mEl.textContent);
+        if (zEl) hotZones = JSON.parse(zEl.textContent);
         
-        console.log('✅ Datos de heatmap parseados correctamente:', {
-            clicks: clicks.length,
-            mouseMovements: mouseMovements.length,
-            hotZones: hotZones.length
-        });
-    } catch (error) {
-        console.error('❌ Error parseando datos de heatmap:', error);
-        // Fallback a arrays vacíos
-        clicks = [];
-        mouseMovements = [];
-        hotZones = [];
-    }
+        console.log('✅ Datos cargados:', { clicks: clicks.length, mouse: mouseMovements.length, zones: hotZones.length });
+    } catch (e) { console.error('❌ Error datos:', e); }
     
+    // Referencias DOM
+    const contentLayer = document.getElementById('materialContent');
     const canvas = document.getElementById('heatmapCanvas');
-    if (!canvas) {
-        console.error('❌ Canvas no encontrado');
-        return;
-    }
+    const ctx = canvas ? canvas.getContext('2d') : null;
     
-    const ctx = canvas.getContext('2d');
-    const container = document.getElementById('heatmapContainer');
-    const clickPointsLayer = document.getElementById('clickPointsLayer');
-    const hotZonesLayer = document.getElementById('hotZonesLayer');
-    
-    let currentVisualization = 'clicks';
+    if (!canvas || !contentLayer) return;
+
+    let currentVis = 'clicks';
     let opacity = 0.7;
-    
-    // Renderizar visualización
+
+    // Redimensionamiento Inteligente
+    function resizeCanvas() {
+        // Esperar a que MathJax y Mermaid terminen de renderizar
+        setTimeout(() => {
+            const width = contentLayer.scrollWidth;
+            const height = contentLayer.scrollHeight;
+            if (width && height) {
+                canvas.width = width;
+                canvas.height = height;
+                console.log(`📏 Canvas ajustado a: ${width}x${height}`);
+                render();
+            }
+        }, 1000); // Delay un poco mayor para dar tiempo a MathJax
+    }
+
+    // Renderizado
     function render() {
-        // Limpiar canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (clickPointsLayer) clickPointsLayer.innerHTML = '';
-        if (hotZonesLayer) hotZonesLayer.innerHTML = '';
         
-        // Dibujar fondo (simulando el contenido del material)
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Dibujar grid de guía
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        for (let x = 0; x < canvas.width; x += 100) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, canvas.height);
-            ctx.stroke();
-        }
-        for (let y = 0; y < canvas.height; y += 100) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(canvas.width, y);
-            ctx.stroke();
-        }
-        
-        // Renderizar según tipo
-        switch (currentVisualization) {
-            case 'clicks':
-                renderClicks();
-                break;
-            case 'mouse':
-                renderMouseMovements();
-                break;
-            case 'hot_zones':
-                renderHotZones();
-                break;
-            case 'all':
-                renderClicks();
-                renderHotZones();
-                break;
-        }
+        if (currentVis === 'clicks' || currentVis === 'all') renderClicks();
+        if (currentVis === 'mouse') renderMouse();
+        if (currentVis === 'hot_zones' || currentVis === 'all') renderZones();
     }
     
     function renderClicks() {
-        if (!clicks || clicks.length === 0) {
-            console.log('⚠️ No hay datos de clicks para renderizar');
-            return;
-        }
-        
-        clicks.forEach(click => {
-            // Normalizar coordenadas (asumiendo resolución 1920x1080 como base)
-            const x = (click.x / 1920) * canvas.width;
-            const y = (click.y / 1080) * canvas.height;
+        clicks.forEach(c => {
+            const x = (c.x / 1920) * canvas.width;
+            // Intentar usar offset guardado, sino fallback
+            const y = c.y; // Asumimos coordenadas relativas al documento
             
-            // Dibujar punto de clic
             ctx.beginPath();
-            ctx.arc(x, y, 10, 0, 2 * Math.PI);
+            ctx.arc(x, y, 8, 0, 2 * Math.PI);
             ctx.fillStyle = `rgba(255, 0, 0, ${opacity})`;
             ctx.fill();
             
-            // Dibujar halo
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, 30);
-            gradient.addColorStop(0, `rgba(255, 0, 0, ${opacity * 0.5})`);
-            gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(x, y, 30, 0, 2 * Math.PI);
-            ctx.fill();
+            const g = ctx.createRadialGradient(x, y, 0, x, y, 25);
+            g.addColorStop(0, `rgba(255, 0, 0, ${opacity * 0.4})`);
+            g.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(x, y, 25, 0, 2 * Math.PI); ctx.fill();
         });
-        
-        console.log(`✅ Renderizados ${clicks.length} clicks`);
     }
     
-    function renderMouseMovements() {
-        if (!mouseMovements || mouseMovements.length < 2) {
-            console.log('⚠️ No hay suficientes datos de movimiento del mouse');
-            return;
-        }
-        
-        ctx.strokeStyle = `rgba(0, 0, 255, ${opacity * 0.3})`;
+    function renderMouse() {
+        if (mouseMovements.length < 2) return;
+        ctx.strokeStyle = `rgba(0, 100, 255, ${opacity * 0.5})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        
-        mouseMovements.forEach((movement, index) => {
-            const x = (movement.x / 1920) * canvas.width;
-            const y = (movement.y / 1080) * canvas.height;
-            
-            if (index === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
+        mouseMovements.forEach((m, i) => {
+            const x = (m.x / 1920) * canvas.width;
+            // Ajuste similar para Y si es necesario
+            if (i===0) ctx.moveTo(x, m.y); else ctx.lineTo(x, m.y);
         });
-        
         ctx.stroke();
-        console.log(`✅ Renderizados ${mouseMovements.length} movimientos de mouse`);
     }
     
-    function renderHotZones() {
-        if (!hotZones || hotZones.length === 0) {
-            console.log('⚠️ No hay zonas calientes para renderizar');
-            return;
-        }
-        
-        hotZones.forEach(zone => {
-            const x = (zone.x / 1920) * canvas.width;
-            const y = (zone.y / 1080) * canvas.height;
-            const width = (zone.width / 1920) * canvas.width;
-            const height = (zone.height / 1080) * canvas.height;
+    function renderZones() {
+        hotZones.forEach(z => {
+            const x = (z.x / 1920) * canvas.width;
+            const intensity = z.intensity / 100;
             
-            // Color basado en intensidad
-            const intensity = zone.intensity / 100;
-            const color = `rgba(255, ${Math.floor(255 * (1 - intensity))}, 0, ${opacity * 0.4})`;
+            ctx.fillStyle = `rgba(255, ${Math.floor(255*(1-intensity))}, 0, ${opacity * 0.3})`;
+            ctx.fillRect(x, z.y, (z.width/1920)*canvas.width, z.height);
             
-            ctx.fillStyle = color;
-            ctx.fillRect(x, y, width, height);
-            
-            ctx.strokeStyle = `rgba(255, 0, 0, ${opacity})`;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, width, height);
-            
-            // Etiqueta de intensidad
-            ctx.fillStyle = '#333';
-            ctx.font = 'bold 12px Arial';
-            ctx.fillText(`${zone.intensity.toFixed(0)}%`, x + 5, y + 15);
-        });
-        
-        console.log(`✅ Renderizadas ${hotZones.length} zonas calientes`);
-    }
-    
-    // Event listeners
-    const visualizationType = document.getElementById('visualizationType');
-    const opacitySlider = document.getElementById('opacitySlider');
-    const opacityValue = document.getElementById('opacityValue');
-    
-    if (visualizationType) {
-        visualizationType.addEventListener('change', (e) => {
-            currentVisualization = e.target.value;
-            render();
+            ctx.strokeStyle = `rgba(255, 0, 0, ${opacity * 0.8})`;
+            ctx.strokeRect(x, z.y, (z.width/1920)*canvas.width, z.height);
         });
     }
+
+    // Listeners
+    document.getElementById('visualizationType').addEventListener('change', (e) => { currentVis = e.target.value; render(); });
+    document.getElementById('opacitySlider').addEventListener('input', (e) => { opacity = e.target.value / 100; document.getElementById('opacityValue').textContent = e.target.value+'%'; render(); });
     
-    if (opacitySlider && opacityValue) {
-        opacitySlider.addEventListener('input', (e) => {
-            opacity = e.target.value / 100;
-            opacityValue.textContent = e.target.value + '%';
-            render();
-        });
-    }
-    
-    // Renderizar inicial
-    console.log('🎨 Iniciando renderizado del heatmap...');
-    render();
-    
-    // Log final
-    console.log('📊 Resumen del heatmap:', {
-        clicks: clicks.length,
-        mouseMovements: mouseMovements.length,
-        hotZones: hotZones.length,
-        canvasSize: `${canvas.width}x${canvas.height}`
-    });
+    window.addEventListener('load', resizeCanvas);
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 })();
 </script>
 {% endblock %}
