@@ -3,9 +3,9 @@
  * SISTEMA DE TRACKING ROBUSTO - RecallAI
  * ✅ CORRECCIONES APLICADAS:
  * - Problema 1: Detección precisa de tiempo inactivo
- * - Problema 2: Event listeners dinámicos para flashcards/mapas
+ * - Problema 2: Event listeners dinámicos para flashcards
  * - Problema 3: Datos de heatmap correctamente formateados
- * - Fix Adicional: Conteo de nodos iniciales (solución 18/20)
+ * - Fix Definitivo: Conteo de nodos 100% preciso mediante integración directa con D3
  * ========================================
  */
 
@@ -19,10 +19,10 @@ class StudyTracker {
         this.isActive = true;
         this.tabVisible = true;
         
-        // ✅ CORRECCIÓN PROBLEMA 1: Acumuladores de tiempo
-        this.totalIdleTime = 0; // Acumulador de tiempo inactivo
-        this.lastIdleCheck = Date.now(); // Última vez que chequeamos idle
-        this.currentlyIdle = false; // Estado actual
+        // Acumuladores de tiempo
+        this.totalIdleTime = 0; 
+        this.lastIdleCheck = Date.now(); 
+        this.currentlyIdle = false; 
         
         // Contadores
         this.metrics = {
@@ -34,6 +34,10 @@ class StudyTracker {
             sectionsVisited: new Set(),
             maxScrollDepth: 0
         };
+
+        // ✅ FIX: Persistencia en memoria para nodos visitados
+        // Usamos un Set para almacenar IDs únicos. Esto sobrevive a la destrucción/creación del DOM por D3.
+        this.visitedNodes = new Set();
         
         // Buffers de eventos
         this.events = [];
@@ -118,7 +122,6 @@ class StudyTracker {
     async endSession(exitType = 'normal') {
         this.isActive = false;
         
-        // ✅ CORRECCIÓN PROBLEMA 1: Calcular tiempo activo final correctamente
         this.updateIdleAccumulator(); // Actualizar una última vez antes de finalizar
         
         const duration = this.getSessionDuration();
@@ -151,7 +154,7 @@ class StudyTracker {
                     'Authorization': `Bearer ${localStorage.getItem('access_token')}`
                 },
                 body: JSON.stringify(endData),
-                keepalive: true // Importante para beforeunload
+                keepalive: true 
             });
             
             console.log('✅ Sesión finalizada:', endData);
@@ -161,7 +164,7 @@ class StudyTracker {
     }
     
     // ============================================
-    // EVENT LISTENERS
+    // EVENT LISTENERS GENÉRICOS
     // ============================================
     
     initEventListeners() {
@@ -182,98 +185,55 @@ class StudyTracker {
             hoverTimeout = setTimeout(() => this.handleHover(e), 200);
         });
         
-        // FOCUS (tab change detection)
+        // FOCUS
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
         
         // COPY TEXT
         document.addEventListener('copy', (e) => this.handleCopy(e));
-        
-        // ✅ CORRECCIÓN PROBLEMA 2: NO inicializar listeners específicos aquí
-        // Los inicializaremos después de cargar el contenido dinámico
         
         // KEYBOARD
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
     }
 
     // ============================================
-    // ✅ NUEVO: MÉTODO AUXILIAR PARA OBTENER ID (FIX 18/20)
+    // ✅ NUEVO: API PÚBLICA PARA REGISTRO DE NODOS (FIX 100% PRECISIÓN)
+    // Este método es llamado directamente desde el código D3 en el template
     // ============================================
-    getNodeId(node) {
-        // 1. Intentar recuperar ID ya asignado
-        let nodeId = node.getAttribute('data-node-id'); 
-        if (nodeId) return nodeId;
+    registerNodeView(nodeId, nodeText, isInitial = false) {
+        if (!nodeId) return;
 
-        // 2. Buscar ID nativo o atributos de datos
-        nodeId = node.id || node.getAttribute('data-node') || node.getAttribute('data-id');
-
-        // 3. Generar ID basado en contenido si no existe
-        if (!nodeId) {
-            const textElement = node.querySelector('text, .node-text, foreignObject div, span, p');
-            if (textElement) {
-                const nodeText = textElement.textContent.trim();
-                // Hash simple del texto para ID único
-                const hash = Array.from(nodeText).reduce((s, c) => Math.imul(31, s) + c.charCodeAt(0) | 0, 0);
-                // Combinar posición + hash
-                const position = Array.from(node.parentElement?.children || []).indexOf(node);
-                nodeId = `node_${position}_${Math.abs(hash)}`;
-            } else {
-                // Último recurso: índice global
-                const allNodes = document.querySelectorAll('.arbol-nodo, [data-node], g.arbol-nodo');
-                const index = Array.from(allNodes).indexOf(node);
-                nodeId = `node_index_${index}_${Date.now()}`;
-            }
+        // 1. Verificar persistencia en memoria: Si ya lo visitamos, ignorar.
+        // Esto cumple los requisitos 2 y 3: no contar dobles, y mantener el conteo aunque se cierre.
+        if (this.visitedNodes.has(nodeId)) {
+            // console.log(`🔄 Nodo ya registrado anteriormente (Memoria): ${nodeId}`);
+            return;
         }
 
-        // Guardar para el futuro
-        node.setAttribute('data-node-id', nodeId);
-        return nodeId;
+        // 2. Registrar nueva visita
+        this.visitedNodes.add(nodeId);
+        console.log(`✨ Nuevo nodo registrado: ${nodeId} (${isInitial ? 'Carga Inicial' : 'Interacción Usuario'})`);
+
+        // 3. Enviar evento al backend
+        this.trackEvent('node_expand', {
+            element_id: nodeId,
+            element_text: nodeText ? nodeText.substring(0, 100) : 'Sin texto',
+            trigger: isInitial ? 'initial_load' : 'user_click'
+        });
     }
 
     // ============================================
-    // ✅ NUEVO: ESCANEO DE ESTADO INICIAL (FIX 18/20)
+    // LISTENERS ESPECÍFICOS DEL MATERIAL
     // ============================================
-    scanInitialNodes() {
-        console.log('🔍 Escaneando nodos abiertos inicialmente...');
-        
-        // Buscar nodos que visualmente están abiertos (no collapsed o explicitamente expanded)
-        const openNodes = document.querySelectorAll('.arbol-nodo:not(.collapsed), .arbol-nodo.expanded, [data-expanded="true"]');
-        
-        openNodes.forEach(node => {
-            const nodeId = this.getNodeId(node);
-            
-            // Verificar si ya fue contado (data-was-expanded)
-            if (node.getAttribute('data-was-expanded') !== 'true') {
-                console.log(`✨ Registrando nodo inicial abierto: ${nodeId}`);
-                
-                // Marcar como contado
-                node.setAttribute('data-was-expanded', 'true');
-                node.setAttribute('data-expanded', 'true'); 
-                
-                // Registrar evento (sin sumar interacción de usuario, pero sí progreso)
-                this.trackEvent('node_expand', {
-                    element_id: nodeId,
-                    element_text: node.textContent.substring(0, 100),
-                    trigger: 'initial_load' // Importante: Diferenciar de clic
-                });
-            }
-        });
-    }
     
-    // ✅ CORRECCIÓN PROBLEMA 2: Nueva función para inicializar listeners después de cargar contenido
     initMaterialSpecificListeners() {
         console.log('🔧 Inicializando listeners específicos del material...');
         
-        // Esperar un momento para que el DOM se actualice completamente
         setTimeout(() => {
-            // ============================================
-            // FLASHCARD FLIPS - Usar event delegation
-            // ============================================
+            // FLASHCARD FLIPS
             document.body.addEventListener('click', (e) => {
                 const flashcard = e.target.closest('.flashcard');
                 if (flashcard) {
                     const cardId = flashcard.id || flashcard.getAttribute('data-card-id');
-                    console.log('🎴 Flashcard flip detectado:', cardId);
-                    
                     this.trackEvent('flashcard_flip', {
                         element_id: cardId,
                         element_text: flashcard.querySelector('.front, .content-front')?.textContent.substring(0, 100)
@@ -281,61 +241,10 @@ class StudyTracker {
                 }
             });
             
-            // ============================================
-            // ÁRBOL DE DECISIÓN - Mejorar detección de nodos (ACTUALIZADO)
-            // ============================================
-            document.body.addEventListener('click', (e) => {
-                // Buscar el nodo más cercano con múltiples selectores
-                const node = e.target.closest('.arbol-nodo') || 
-                            e.target.closest('[data-node]') || 
-                            e.target.closest('.node') ||
-                            e.target.closest('g.arbol-nodo');
-                
-                if (node && !e.target.closest('.flashcard')) { // Evitar conflicto con flashcards
-                    
-                    // ✅ USAR HELPER UNIFICADO PARA ID
-                    const nodeId = this.getNodeId(node);
-                    
-                    // Determinar si está expandiendo o colapsando
-                    const isExpanding = node.classList.contains('collapsed') || 
-                                       !node.classList.contains('expanded') ||
-                                       node.getAttribute('data-expanded') !== 'true';
-                    
-                    // Actualizar estado visual
-                    if (isExpanding) {
-                        node.classList.add('expanded');
-                        node.classList.remove('collapsed');
-                        node.setAttribute('data-expanded', 'true');
-                    } else {
-                        node.classList.add('collapsed');
-                        node.classList.remove('expanded');
-                        node.setAttribute('data-expanded', 'false');
-                    }
-                    
-                    // ✅ CORRECCIÓN: Solo trackear cuando hay un cambio real
-                    const wasExpanded = node.getAttribute('data-was-expanded') === 'true';
-
-                    if (isExpanding && !wasExpanded) {
-                        // Primera vez que se expande este nodo
-                        node.setAttribute('data-was-expanded', 'true');
-                        console.log(`🌳 Nodo expandido (primera vez - clic): ${nodeId}`);
-                        
-                        this.trackEvent('node_expand', {
-                            element_id: nodeId,
-                            element_text: node.textContent.substring(0, 100),
-                            trigger: 'user_click'
-                        });
-                    } else if (isExpanding) {
-                        console.log(`🔄 Nodo ya expandido antes: ${nodeId} (no contabilizado)`);
-                    } else {
-                        console.log(`🔽 Nodo colapsado: ${nodeId} (no contabilizado)`);
-                    }
-                }
-            });
+            // NOTA: Eliminamos el listener global de '.arbol-nodo' aquí.
+            // Ahora el árbol llama directamente a registerNodeView() para evitar errores de sincronización.
             
-            // ============================================
-            // TABS DE RESUMEN (mantener sin cambios)
-            // ============================================
+            // TABS DE RESUMEN
             document.body.addEventListener('click', (e) => {
                 const tab = e.target.closest('.tab-button, [role="tab"]');
                 if (tab) {
@@ -347,12 +256,8 @@ class StudyTracker {
                 }
             });
 
-            // ✅ EJECUTAR ESCANEO INICIAL AQUÍ
-            // Esto detectará los nodos que ya estaban abiertos al cargar
-            this.scanInitialNodes();
-            
-            console.log('✅ Listeners específicos inicializados y estado inicial escaneado');
-        }, 500); // Dar tiempo para que el contenido HTML se cargue completamente
+            console.log('✅ Listeners específicos inicializados');
+        }, 500); 
     }
     
     // ============================================
@@ -409,7 +314,6 @@ class StudyTracker {
         this.updateActivity();
         this.metrics.hoverEvents++;
         
-        // Solo trackear hovers sobre elementos importantes
         const target = event.target;
         if (this.isImportantElement(target)) {
             this.trackEvent('hover', {
@@ -425,7 +329,6 @@ class StudyTracker {
             this.tabVisible = false;
             this.trackEvent('tab_hidden', {});
             
-            // Pausar tiempo de sección actual
             if (this.currentSection && this.sectionStartTime) {
                 this.updateSectionTime(this.currentSection);
                 this.sectionStartTime = null;
@@ -435,7 +338,6 @@ class StudyTracker {
             this.trackEvent('tab_visible', {});
             this.updateActivity();
             
-            // Reanudar tiempo de sección
             if (this.currentSection) {
                 this.sectionStartTime = Date.now();
             }
@@ -446,7 +348,6 @@ class StudyTracker {
     
     handleCopy(event) {
         this.updateActivity();
-        
         const copiedText = window.getSelection().toString();
         this.trackEvent('copy_text', {
             element_text: copiedText.substring(0, 500),
@@ -456,14 +357,7 @@ class StudyTracker {
     
     handleKeyPress(event) {
         this.updateActivity();
-        
-        // Trackear atajos útiles
-        const shortcuts = {
-            'ctrl+f': 'search',
-            'ctrl+c': 'copy',
-            'f11': 'fullscreen'
-        };
-        
+        const shortcuts = { 'ctrl+f': 'search', 'ctrl+c': 'copy', 'f11': 'fullscreen' };
         const key = event.ctrlKey ? `ctrl+${event.key.toLowerCase()}` : event.key;
         if (shortcuts[key]) {
             this.trackEvent('keyboard_shortcut', {
@@ -477,15 +371,9 @@ class StudyTracker {
     // ============================================
     
     markSections() {
-        // Marcar todas las secciones importantes del DOM
         const sectionSelectors = [
-            '.weak-section',
-            '.review-section',
-            '.flashcard',
-            '.arbol-nodo',
-            '.summary-block',
-            '.comparison-table',
-            '.code-block'
+            '.weak-section', '.review-section', '.flashcard', 
+            '.arbol-nodo', '.summary-block', '.comparison-table', '.code-block'
         ];
         
         sectionSelectors.forEach(selector => {
@@ -507,7 +395,6 @@ class StudyTracker {
         let closestSection = null;
         let closestDistance = Infinity;
         
-        // Encontrar sección más cercana al centro del viewport
         document.querySelectorAll('[data-tracked-section="true"]').forEach(section => {
             const rect = section.getBoundingClientRect();
             const sectionMiddle = scrollTop + rect.top + (rect.height / 2);
@@ -520,7 +407,6 @@ class StudyTracker {
         });
         
         if (closestSection && closestSection.id !== this.currentSection) {
-            // Cambió de sección
             if (this.currentSection) {
                 this.updateSectionTime(this.currentSection);
             }
@@ -567,7 +453,6 @@ class StudyTracker {
     
     startMouseTracking() {
         let lastSample = 0;
-        
         document.addEventListener('mousemove', (e) => {
             const now = Date.now();
             if (now - lastSample > this.mouseSampleRate) {
@@ -577,8 +462,6 @@ class StudyTracker {
                     timestamp: now
                 });
                 lastSample = now;
-                
-                // Limitar tamaño del buffer
                 if (this.heatmapData.mouseMovements.length > 1000) {
                     this.heatmapData.mouseMovements = this.heatmapData.mouseMovements.slice(-500);
                 }
@@ -601,14 +484,13 @@ class StudyTracker {
         this.events.push(event);
         this.metrics.totalInteractions++;
         
-        // Sync si buffer está lleno
         if (this.events.length >= this.batchSize) {
             this.syncData();
         }
     }
     
     // ============================================
-    // ✅ CORRECCIÓN PROBLEMA 1: DETECCIÓN PRECISA DE IDLE
+    // DETECCIÓN DE IDLE
     // ============================================
     
     updateIdleAccumulator() {
@@ -616,36 +498,27 @@ class StudyTracker {
         const timeSinceLastCheck = now - this.lastIdleCheck;
         const timeSinceActivity = now - this.lastActivityTime;
         
-        // Si estamos idle (más de 30s sin actividad)
         if (timeSinceActivity > this.idleThreshold) {
             if (!this.currentlyIdle) {
-                // Acabamos de entrar en idle
                 this.currentlyIdle = true;
                 console.log('⏸️  Usuario entró en idle');
             }
-            // Acumular el tiempo que ha pasado desde el último check
             this.totalIdleTime += timeSinceLastCheck;
         } else {
             if (this.currentlyIdle) {
-                // Acabamos de salir de idle
                 this.currentlyIdle = false;
                 console.log('▶️  Usuario salió de idle');
             }
-            // No acumulamos nada si está activo
         }
-        
         this.lastIdleCheck = now;
     }
     
     startIdleDetection() {
-        // Actualizar acumulador cada 5 segundos
         setInterval(() => {
             if (this.isActive) {
                 this.updateIdleAccumulator();
-                
                 const timeSinceActivity = Date.now() - this.lastActivityTime;
                 
-                // Log cada 30s para debug
                 if (timeSinceActivity > this.idleThreshold && Math.floor(timeSinceActivity / 30000) > Math.floor((timeSinceActivity - 5000) / 30000)) {
                     console.log(`⏸️  Idle detectado: ${Math.floor(timeSinceActivity / 1000)}s sin actividad`);
                     this.trackEvent('pause_study', {
@@ -653,7 +526,7 @@ class StudyTracker {
                     });
                 }
             }
-        }, 5000); // Check cada 5 segundos para mayor precisión
+        }, 5000);
     }
     
     updateActivity() {
@@ -664,10 +537,9 @@ class StudyTracker {
             this.trackEvent('resume_study', {});
         }
         
-        // Actualizar el tiempo de última actividad
         this.lastActivityTime = Date.now();
-        this.lastIdleCheck = Date.now(); // Resetear también el check
-        this.currentlyIdle = false; // Ya no está idle
+        this.lastIdleCheck = Date.now();
+        this.currentlyIdle = false;
     }
     
     // ============================================
@@ -677,7 +549,6 @@ class StudyTracker {
     async syncData(isFinal = false) {
         if (this.events.length === 0 && !isFinal) return;
         
-        // ✅ CORRECCIÓN PROBLEMA 1: Actualizar acumulador antes de sincronizar
         this.updateIdleAccumulator();
         
         const payload = {
@@ -709,8 +580,6 @@ class StudyTracker {
             
             if (response.ok) {
                 console.log(`✅ Sincronizado: ${this.events.length} eventos | Active: ${Math.floor(this.calculateActiveTime() / 1000)}s | Idle: ${Math.floor(this.totalIdleTime / 1000)}s`);
-                
-                // Limpiar buffers después de sync exitoso
                 this.events = [];
                 this.heatmapData.clicks = [];
                 this.heatmapData.scrollPoints = [];
@@ -721,7 +590,6 @@ class StudyTracker {
     }
     
     startPeriodicSync() {
-        // Sincronizar cada 60 segundos
         setInterval(() => {
             if (this.isActive) {
                 this.syncData();
@@ -737,10 +605,8 @@ class StudyTracker {
         return Date.now() - this.sessionStartTime;
     }
     
-    // ✅ CORRECCIÓN PROBLEMA 1: Calcular tiempo activo correctamente
     calculateActiveTime() {
         const totalTime = this.getSessionDuration();
-        // Tiempo activo = tiempo total - tiempo idle acumulado
         return Math.max(0, totalTime - this.totalIdleTime);
     }
     
@@ -804,21 +670,18 @@ class StudyTracker {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Obtener material ID de la URL o del DOM
     const materialId = window.location.pathname.match(/\/material\/(\d+)\//)?.[1];
     const userId = JSON.parse(localStorage.getItem('user') || '{}').id;
     
     if (materialId && userId) {
         window.studyTracker = new StudyTracker(materialId, userId);
         
-        // ✅ CORRECCIÓN PROBLEMA 2: Inicializar listeners después de que se cargue el contenido
-        // Esperar a que el contenido del material se cargue en el DOM
         const observer = new MutationObserver((mutations, obs) => {
             const materialContent = document.getElementById('materialContent');
             if (materialContent && materialContent.children.length > 0) {
                 console.log('📄 Contenido del material cargado, inicializando listeners...');
                 window.studyTracker.initMaterialSpecificListeners();
-                obs.disconnect(); // Dejar de observar una vez inicializado
+                obs.disconnect(); 
             }
         });
         
@@ -827,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
             subtree: true
         });
         
-        // También intentar inicializar después de 2 segundos por si acaso
+        // Fallback
         setTimeout(() => {
             if (window.studyTracker) {
                 window.studyTracker.initMaterialSpecificListeners();
@@ -845,17 +708,16 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('⚠️  No se pudo inicializar StudyTracker: faltan datos');
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
-        const btn = document.createElement('button');
-        btn.textContent = '🛑 CERRAR SESIÓN';
-        btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:15px;background:#dc3545;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:16px;';
-        btn.onclick = () => {
-            if (window.studyTracker) {
-                window.studyTracker.endSession('manual');
-                btn.textContent = '✅ CERRADA';
-                btn.disabled = true;
-            }
-        };
-        document.body.appendChild(btn);
-    }); 
+    // Botón de debug para cerrar sesión manual
+    const btn = document.createElement('button');
+    btn.textContent = '🛑 CERRAR SESIÓN';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:15px;background:#dc3545;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:16px;';
+    btn.onclick = () => {
+        if (window.studyTracker) {
+            window.studyTracker.endSession('manual');
+            btn.textContent = '✅ CERRADA';
+            btn.disabled = true;
+        }
+    };
+    document.body.appendChild(btn);
 });

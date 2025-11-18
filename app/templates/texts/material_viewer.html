@@ -270,29 +270,27 @@
             pointer-events: none;
         }
 
-/* ============================================
+        /* ============================================
            === ESTILOS PARA EL RESUMEN ESTRUCTURADO ===
            ============================================ */
         
-        /* Contenedor general: AHORA OCUPA TODO EL ANCHO */
         .summary-container {
             font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
             line-height: 1.6;
             color: #333;
-            width: 100%;           /* Ocupar todo el ancho disponible */
-            max-width: 100%;       /* Asegurar que no se limite */
-            margin: 0;             /* Sin márgenes externos extras */
+            width: 100%;           
+            max-width: 100%;       
+            margin: 0;             
             box-sizing: border-box;
         }
 
-        /* Títulos */
         .summary-container h1 {
             color: #2c3e50;
             font-size: 2rem;
             border-bottom: 3px solid #2c3e50;
             padding-bottom: 10px;
             margin-bottom: 30px;
-            text-align: left; /* Alineado a la izquierda para look académico */
+            text-align: left; 
         }
 
         .summary-container h2 {
@@ -310,11 +308,10 @@
             font-weight: 600;
         }
 
-        /* --- SECCIONES (Ahora con ancho completo y mejor padding) --- */
         .weak-section {
             background-color: #fff;
             border-left: 6px solid #e74c3c;
-            padding: 30px; /* Más espacio interno */
+            padding: 30px; 
             margin-bottom: 30px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
             border-radius: 4px;
@@ -328,8 +325,6 @@
             border-radius: 4px;
         }
 
-        /* --- TABLAS DE COMPARACIÓN (NUEVO Y CRÍTICO) --- */
-        /* Esto arregla el texto amontonado "Lo Incorrecto Lo Correcto" */
         .comparison-table, .summary-container table {
             width: 100%;
             border-collapse: collapse;
@@ -357,13 +352,12 @@
             border-bottom: none;
         }
 
-        /* --- BLOQUES DE CÓDIGO ROBUSTOS --- */
         .code-block {
             background-color: #282c34;
             border-radius: 6px;
             margin: 20px 0;
             padding: 15px;
-            overflow-x: auto; /* Scroll horizontal si es necesario */
+            overflow-x: auto; 
         }
         
         .code-block pre {
@@ -371,11 +365,10 @@
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 0.9rem;
             color: #abb2bf;
-            white-space: pre-wrap; /* Ajuste de línea automático (evita scroll excesivo) */
+            white-space: pre-wrap; 
             word-wrap: break-word;
         }
 
-        /* --- LISTAS Y TEXTO --- */
         .summary-container ul {
             padding-left: 20px;
         }
@@ -386,10 +379,9 @@
         
         .summary-container p {
             margin-bottom: 15px;
-            text-align: left; /* Justificado o izquierda se lee mejor en ancho completo */
+            text-align: left; 
         }
 
-        /* Indicadores visuales de sección */
         .weak-section h2::before { content: "⚠️ REFUERZO: "; opacity: 0.7; font-size: 0.9em; }
         .review-section h2::before { content: "✓ REPASO: "; opacity: 0.7; font-size: 0.9em; }
 
@@ -540,25 +532,21 @@
             }
             // === FIN LÓGICA MAPA ===
 
-            // Lógica para Flashcards/Otros
-            // Lógica para Flashcards/Otros
             let cleanHTML;
-                        if (material.material_type === 'flashcard') {
-                            cleanHTML = material.html_content;
-                        } else if (material.material_type === 'summary') {
-                            // MODIFICACIÓN: Envolver en container de estilos y sanitizar
-                            const rawHTML = DOMPurify.sanitize(material.html_content, {
-                                ADD_TAGS: ['style', 'h1', 'h2', 'h3', 'div', 'span', 'p', 'ul', 'li', 'strong', 'em', 'code', 'pre', 'table', 'thead', 'tbody', 'tr', 'td', 'th'],
-                                ADD_ATTR: ['class', 'style', 'id']
-                            });
-                            // Inyectamos el wrapper aquí para asegurar que tome el CSS
-                            cleanHTML = `<div class="summary-container">${rawHTML}</div>`;
-                        } else {
-                            cleanHTML = DOMPurify.sanitize(material.html_content, {
-                                ADD_TAGS: ['style', 'script'],
-                                ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
-                            });
-                        }
+            if (material.material_type === 'flashcard') {
+                cleanHTML = material.html_content;
+            } else if (material.material_type === 'summary') {
+                const rawHTML = DOMPurify.sanitize(material.html_content, {
+                    ADD_TAGS: ['style', 'h1', 'h2', 'h3', 'div', 'span', 'p', 'ul', 'li', 'strong', 'em', 'code', 'pre', 'table', 'thead', 'tbody', 'tr', 'td', 'th'],
+                    ADD_ATTR: ['class', 'style', 'id']
+                });
+                cleanHTML = `<div class="summary-container">${rawHTML}</div>`;
+            } else {
+                cleanHTML = DOMPurify.sanitize(material.html_content, {
+                    ADD_TAGS: ['style', 'script'],
+                    ADD_ATTR: ['onclick', 'onmouseover', 'onmouseout', 'style', 'id', 'class']
+                });
+            }
 
             $('#loadingSpinner').hide();
             const contentDiv = $('#materialContent');
@@ -611,19 +599,17 @@
         }
 
         // ============================================
-        // === CÓDIGO D3 MEJORADO (ORDENAMIENTO + COMPRESIÓN INTELIGENTE) ===
+        // === CÓDIGO D3 MEJORADO ===
         // ============================================
 
         let svg, g, treeLayout, rootNode;
         let i = 0;
         const transitionDuration = 400;
         
-        // Configuración Base
-        const nodeWidth = 200;  // Ancho fijo
-        const nodeHorizontalSeparation = 220; // REDUCIDO: Espacio entre columnas más pegado
-        const baseVerticalSeparation = 80;    // REDUCIDO: Espacio base compacto
+        const nodeWidth = 200; 
+        const nodeHorizontalSeparation = 220; 
+        const baseVerticalSeparation = 80;    
 
-        // Función para medir la altura REAL que ocupará el texto
         function calcularAlturasReales(nodos) {
             const dummy = document.createElement('div');
             dummy.style.position = 'absolute';
@@ -645,7 +631,6 @@
             nodos.forEach(n => {
                 dummy.innerHTML = n.texto || "Texto vacío";
                 const alturaRenderizada = dummy.getBoundingClientRect().height;
-                // Altura final = texto + padding (~24px). Mínimo 60px.
                 n.alturaReal = Math.max(60, alturaRenderizada + 24);
             });
 
@@ -655,12 +640,10 @@
         function renderizarArbolDecision(datos) {
             const container = $('#materialContent');
             
-            // 1. Calcular alturas reales
             if (datos.datos && datos.datos.nodos) {
                calcularAlturasReales(datos.datos.nodos);
             }
 
-            // 2. Convertir a jerarquía
             try {
                 rootNode = d3.stratify()
                     .id(d => d.id)
@@ -671,7 +654,6 @@
                 return;
             }
 
-            // 3. Ordenar: Rojos (weak) siempre arriba
             rootNode.each(node => {
                 if (node.children) {
                     node.children.sort((a, b) => {
@@ -682,11 +664,8 @@
                 }
             });
             
-            // 4. Configurar layout COMPACTO INICIAL
-            // Usamos un espacio pequeño por defecto (80px) para que todo empiece pegado
             treeLayout = d3.tree().nodeSize([baseVerticalSeparation, nodeHorizontalSeparation]);
 
-            // 5. Preparar HTML
             const html = `
                 <div id="arbol-container" style="width: 100%; height: 800px; position: relative; overflow: hidden; background: #ffffff; border-radius: 12px;">
                     <svg id="arbol-svg" width="100%" height="100%"></svg>
@@ -713,7 +692,6 @@
             d3.select("#zoom-out").on("click", () => svg.transition().duration(300).call(zoom.scaleBy, 0.8));
             d3.select("#zoom-reset").on("click", () => svg.transition().duration(300).call(zoom.transform, initialTransform));
             
-            // Colapsar inicial
             rootNode.descendants().forEach(d => {
                 d.data.id = d.id;
                 if (d.depth > 0 && d.children) { 
@@ -725,53 +703,48 @@
             rootNode.x0 = height / 2;
             rootNode.y0 = 0;
 
+            // ✅ FIX PUNTO 1: Registrar el NODO RAÍZ inmediatamente como visto (conteo inicial 1/n)
+            if (window.studyTracker) {
+                // Esperar un micro-tick para asegurar que studyTracker está listo si la carga fue muy rápida
+                setTimeout(() => {
+                    window.studyTracker.registerNodeView(
+                        rootNode.data.id, 
+                        rootNode.data.texto, 
+                        true // isInitial = true
+                    );
+                }, 100);
+            }
+
             updateArbol(rootNode);
             svg.call(zoom.transform, initialTransform);
         }
 
         function updateArbol(source) {
-            // A. Ejecutar Layout Base (Compacto)
             treeLayout(rootNode);
 
-            // B. [NUEVO] Ajuste de Espaciado Dinámico (Post-Procesamiento)
-            // Ordenamos todos los nodos por su posición vertical (x) calculada por D3
             let nodes = rootNode.descendants().sort((a, b) => a.x - b.x);
             
-            // Recorremos de arriba a abajo ajustando posiciones para evitar solapamientos
             for (let i = 1; i < nodes.length; i++) {
                 let prev = nodes[i-1];
                 let curr = nodes[i];
-                
-                // Calculamos la distancia MÍNIMA necesaria entre el nodo anterior y este
-                // (Mitad de altura de uno + Mitad de altura del otro + 15px de margen)
                 let minGap = (prev.data.alturaReal / 2) + (curr.data.alturaReal / 2) + 15;
-                
-                // Distancia actual que les dio el layout compacto
                 let currentGap = curr.x - prev.x;
-                
-                // Si la distancia actual es menor a la necesaria (se solapan), empujamos
                 if (currentGap < minGap) {
                     let pushAmount = minGap - currentGap;
                     curr.x += pushAmount;
-                    // IMPORTANTE: Esto solo empuja al nodo actual respecto al anterior
-                    // En la siguiente iteración (i+1), el siguiente nodo se comparará
-                    // con la NUEVA posición de 'curr', propagando el empuje hacia abajo.
                 }
             }
 
-            // C. Renderizar normalmente con las nuevas coordenadas X ajustadas
             const links = rootNode.links();
             const node = g.selectAll("g.arbol-nodo")
                 .data(nodes, d => d.id || (d.id = ++i));
 
-            // Enter
             const nodeEnter = node.enter().append("g")
                 .attr("class", "arbol-nodo")
                 .attr("transform", d => `translate(${source.y0},${source.x0})`)
                 .style("opacity", 0)
                 .on("click", toggleNodo);
 
-            // Rect con altura dinámica
             nodeEnter.append("rect")
                 .attr("width", nodeWidth)
                 .attr("height", 0) 
@@ -779,7 +752,6 @@
                 .attr("rx", d => obtenerEstiloNodo(d.data.nivel, d.data.es_tema_debil).borderRadius)
                 .style("stroke-width", "2px");
 
-            // ForeignObject con altura dinámica
             nodeEnter.append("foreignObject")
                 .attr("width", nodeWidth - 16)
                 .attr("height", 0) 
@@ -792,19 +764,17 @@
             botonToggle.append("circle").attr("r", 12).style("stroke-width", "2px");
             botonToggle.append("text").attr("text-anchor", "middle").attr("dy", "0.35em").attr("font-size", "14px").attr("font-weight", "bold");
 
-            // Update
             const nodeUpdate = nodeEnter.merge(node);
             
             nodeUpdate.transition()
                 .duration(transitionDuration)
-                .attr("transform", d => `translate(${d.y},${d.x})`) // Usa la d.x AJUSTADA
+                .attr("transform", d => `translate(${d.y},${d.x})`)
                 .style("opacity", 1);
             
             nodeUpdate.each(function(d) {
                 const estilo = obtenerEstiloNodo(d.data.nivel, d.data.es_tema_debil);
                 const h = d.data.alturaReal; 
 
-                // Actualizar Rect
                 d3.select(this).select("rect")
                     .transition().duration(transitionDuration)
                     .attr("height", h)
@@ -812,12 +782,10 @@
                     .attr("fill", estilo.background)
                     .attr("stroke", estilo.border);
 
-                // Actualizar Texto
                 let claseTexto = "arbol-texto-contenedor";
                 if (d.data.es_tema_debil) claseTexto += " tema-debil";
                 if (d.depth === 0) claseTexto += " raiz";
 
-                // Actualizar ForeignObject
                 d3.select(this).select("foreignObject")
                     .attr("height", h - 10) 
                     .attr("y", -(h / 2) + 5) 
@@ -825,7 +793,6 @@
                     .html(d.data.texto)
                     .attr("class", claseTexto);
 
-                // Botón
                 const boton = d3.select(this).select(".arbol-boton-toggle");
                 if (d.children || d._children) {
                     boton.style("display", null)
@@ -844,14 +811,12 @@
                 }
             });
 
-            // Exit
             node.exit().transition()
                 .duration(transitionDuration)
                 .attr("transform", d => `translate(${source.y},${source.x})`)
                 .style("opacity", 0)
                 .remove();
 
-            // Links
             const link = g.selectAll("path.arbol-link")
                 .data(links, d => d.target.id);
 
@@ -885,12 +850,25 @@
         
         function toggleNodo(event, d) {
             if (event.defaultPrevented) return; 
+
             if (d.children) {
+                // CERRAR NODO
                 d._children = d.children;
                 d.children = null;
             } else if (d._children) {
+                // ABRIR NODO
                 d.children = d._children;
                 d._children = null;
+
+                // ✅ FIX PUNTOS 2 y 3: Registrar nodo expandido
+                // Se llama directamente aquí para garantizar sincronización con D3
+                if (window.studyTracker) {
+                    window.studyTracker.registerNodeView(
+                        d.data.id, 
+                        d.data.texto,
+                        false // isInitial = false
+                    );
+                }
             }
             updateArbol(d);
         }
