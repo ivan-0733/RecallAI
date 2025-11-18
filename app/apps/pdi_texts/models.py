@@ -643,8 +643,33 @@ class UserDidacticMaterial(models.Model):
         # Calcular completitud promedio
         avg_completion = 0
         if total_sessions > 0:
-            total_depth = sum(s.max_scroll_depth for s in sessions)
-            avg_completion = total_depth / total_sessions
+            total_completion = 0
+            
+            for sess in sessions:
+                if self.material_type == 'flashcard':
+                    # Contar flashcards únicas volteadas
+                    flashcard_events = sess.events.filter(event_type='flashcard_flip')
+                    unique_flashcards = {e.element_id for e in flashcard_events if e.element_id}
+                    
+                    # Usar total guardado en BD
+                    total = self.total_flashcards if self.total_flashcards > 0 else 20
+                    session_completion = (len(unique_flashcards) / total) * 100
+                    
+                elif self.material_type in ['decision_tree', 'mind_map']:
+                    # Contar nodos únicos expandidos
+                    node_events = sess.events.filter(event_type='node_expand')
+                    unique_nodes = {e.element_id for e in node_events if e.element_id}
+                    
+                    # Usar total guardado en BD
+                    total = self.total_nodes if self.total_nodes > 0 else 15
+                    session_completion = (len(unique_nodes) / total) * 100
+                else:
+                    # Para resúmenes, usar scroll depth
+                    session_completion = sess.max_scroll_depth or 0
+                
+                total_completion += min(100, session_completion)
+            
+            avg_completion = total_completion / total_sessions
 
         return {
             'sessions_count': total_sessions,

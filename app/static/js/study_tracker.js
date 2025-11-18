@@ -5,6 +5,7 @@
  * - Problema 1: Detección precisa de tiempo inactivo
  * - Problema 2: Event listeners dinámicos para flashcards/mapas
  * - Problema 3: Datos de heatmap correctamente formateados
+ * - Fix Adicional: Conteo de nodos iniciales (solución 18/20)
  * ========================================
  */
 
@@ -193,6 +194,70 @@ class StudyTracker {
         // KEYBOARD
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
     }
+
+    // ============================================
+    // ✅ NUEVO: MÉTODO AUXILIAR PARA OBTENER ID (FIX 18/20)
+    // ============================================
+    getNodeId(node) {
+        // 1. Intentar recuperar ID ya asignado
+        let nodeId = node.getAttribute('data-node-id'); 
+        if (nodeId) return nodeId;
+
+        // 2. Buscar ID nativo o atributos de datos
+        nodeId = node.id || node.getAttribute('data-node') || node.getAttribute('data-id');
+
+        // 3. Generar ID basado en contenido si no existe
+        if (!nodeId) {
+            const textElement = node.querySelector('text, .node-text, foreignObject div, span, p');
+            if (textElement) {
+                const nodeText = textElement.textContent.trim();
+                // Hash simple del texto para ID único
+                const hash = Array.from(nodeText).reduce((s, c) => Math.imul(31, s) + c.charCodeAt(0) | 0, 0);
+                // Combinar posición + hash
+                const position = Array.from(node.parentElement?.children || []).indexOf(node);
+                nodeId = `node_${position}_${Math.abs(hash)}`;
+            } else {
+                // Último recurso: índice global
+                const allNodes = document.querySelectorAll('.arbol-nodo, [data-node], g.arbol-nodo');
+                const index = Array.from(allNodes).indexOf(node);
+                nodeId = `node_index_${index}_${Date.now()}`;
+            }
+        }
+
+        // Guardar para el futuro
+        node.setAttribute('data-node-id', nodeId);
+        return nodeId;
+    }
+
+    // ============================================
+    // ✅ NUEVO: ESCANEO DE ESTADO INICIAL (FIX 18/20)
+    // ============================================
+    scanInitialNodes() {
+        console.log('🔍 Escaneando nodos abiertos inicialmente...');
+        
+        // Buscar nodos que visualmente están abiertos (no collapsed o explicitamente expanded)
+        const openNodes = document.querySelectorAll('.arbol-nodo:not(.collapsed), .arbol-nodo.expanded, [data-expanded="true"]');
+        
+        openNodes.forEach(node => {
+            const nodeId = this.getNodeId(node);
+            
+            // Verificar si ya fue contado (data-was-expanded)
+            if (node.getAttribute('data-was-expanded') !== 'true') {
+                console.log(`✨ Registrando nodo inicial abierto: ${nodeId}`);
+                
+                // Marcar como contado
+                node.setAttribute('data-was-expanded', 'true');
+                node.setAttribute('data-expanded', 'true'); 
+                
+                // Registrar evento (sin sumar interacción de usuario, pero sí progreso)
+                this.trackEvent('node_expand', {
+                    element_id: nodeId,
+                    element_text: node.textContent.substring(0, 100),
+                    trigger: 'initial_load' // Importante: Diferenciar de clic
+                });
+            }
+        });
+    }
     
     // ✅ CORRECCIÓN PROBLEMA 2: Nueva función para inicializar listeners después de cargar contenido
     initMaterialSpecificListeners() {
@@ -217,7 +282,7 @@ class StudyTracker {
             });
             
             // ============================================
-            // ÁRBOL DE DECISIÓN - Mejorar detección de nodos
+            // ÁRBOL DE DECISIÓN - Mejorar detección de nodos (ACTUALIZADO)
             // ============================================
             document.body.addEventListener('click', (e) => {
                 // Buscar el nodo más cercano con múltiples selectores
@@ -227,53 +292,16 @@ class StudyTracker {
                             e.target.closest('g.arbol-nodo');
                 
                 if (node && !e.target.closest('.flashcard')) { // Evitar conflicto con flashcards
-                    // Obtener el ID del nodo de múltiples fuentes posibles
-                                        // ✅ CORRECCIÓN: Generar ID único y persistente
-                    let nodeId = node.getAttribute('data-node-id'); // Primero intentar recuperar ID asignado
-
-                    if (!nodeId) {
-                        // Si no tiene ID asignado, generarlo
-                        nodeId = node.id || 
-                                node.getAttribute('data-node') || 
-                                node.getAttribute('data-id');
-                        
-                        // Si aún no hay ID, usar una combinación de propiedades únicas
-                        if (!nodeId) {
-                            const textElement = node.querySelector('text') || 
-                                            node.querySelector('.node-text') ||
-                                            node.querySelector('foreignObject div') ||
-                                            node.querySelector('span') ||
-                                            node.querySelector('p');
-                            
-                            if (textElement) {
-                                const nodeText = textElement.textContent.trim();
-                                
-                                // Usar hash simple del texto para ID único
-                                const hash = Array.from(nodeText).reduce((s, c) => Math.imul(31, s) + c.charCodeAt(0) | 0, 0);
-                                
-                                // Combinar: posición en el DOM + hash del texto
-                                const siblings = Array.from(node.parentElement?.children || []);
-                                const position = siblings.indexOf(node);
-                                
-                                nodeId = `node_${position}_${Math.abs(hash)}`;
-                            } else {
-                                // Último recurso: usar índice en el árbol SVG
-                                const allNodes = document.querySelectorAll('.arbol-nodo, [data-node], g.arbol-nodo');
-                                const index = Array.from(allNodes).indexOf(node);
-                                nodeId = `node_index_${index}_${Date.now()}`;
-                            }
-                        }
-                        
-                        // Asignar el ID al nodo para futuras referencias
-                        node.setAttribute('data-node-id', nodeId);
-                        console.log(`🆔 ID asignado al nodo: ${nodeId}`);
-                    }
+                    
+                    // ✅ USAR HELPER UNIFICADO PARA ID
+                    const nodeId = this.getNodeId(node);
                     
                     // Determinar si está expandiendo o colapsando
                     const isExpanding = node.classList.contains('collapsed') || 
                                        !node.classList.contains('expanded') ||
                                        node.getAttribute('data-expanded') !== 'true';
                     
+                    // Actualizar estado visual
                     if (isExpanding) {
                         node.classList.add('expanded');
                         node.classList.remove('collapsed');
@@ -290,27 +318,17 @@ class StudyTracker {
                     if (isExpanding && !wasExpanded) {
                         // Primera vez que se expande este nodo
                         node.setAttribute('data-was-expanded', 'true');
-                        console.log(`🌳 Nodo expandido (primera vez): ${nodeId}`);
+                        console.log(`🌳 Nodo expandido (primera vez - clic): ${nodeId}`);
                         
                         this.trackEvent('node_expand', {
                             element_id: nodeId,
-                            element_text: node.textContent.substring(0, 100)
+                            element_text: node.textContent.substring(0, 100),
+                            trigger: 'user_click'
                         });
                     } else if (isExpanding) {
                         console.log(`🔄 Nodo ya expandido antes: ${nodeId} (no contabilizado)`);
                     } else {
                         console.log(`🔽 Nodo colapsado: ${nodeId} (no contabilizado)`);
-                    }
-
-                    // Actualizar estado visual
-                    if (isExpanding) {
-                        node.classList.add('expanded');
-                        node.classList.remove('collapsed');
-                        node.setAttribute('data-expanded', 'true');
-                    } else {
-                        node.classList.add('collapsed');
-                        node.classList.remove('expanded');
-                        node.setAttribute('data-expanded', 'false');
                     }
                 }
             });
@@ -328,8 +346,12 @@ class StudyTracker {
                     });
                 }
             });
+
+            // ✅ EJECUTAR ESCANEO INICIAL AQUÍ
+            // Esto detectará los nodos que ya estaban abiertos al cargar
+            this.scanInitialNodes();
             
-            console.log('✅ Listeners específicos inicializados con event delegation');
+            console.log('✅ Listeners específicos inicializados y estado inicial escaneado');
         }, 500); // Dar tiempo para que el contenido HTML se cargue completamente
     }
     
@@ -807,7 +829,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // También intentar inicializar después de 2 segundos por si acaso
         setTimeout(() => {
-            window.studyTracker.initMaterialSpecificListeners();
+            if (window.studyTracker) {
+                window.studyTracker.initMaterialSpecificListeners();
+            }
         }, 2000);
         
         console.log(`
