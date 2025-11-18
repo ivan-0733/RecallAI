@@ -683,33 +683,33 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
         total_time = aggregates['total_time'] or 0
         total_active = aggregates['total_active'] or 0
         total_interactions = aggregates['total_interactions'] or 0
-        total_clicks = aggregates['total_clicks'] or 0
-        total_scrolls = aggregates['total_scrolls'] or 0
         
         # Calcular promedios y porcentajes
         avg_completion = 0
         avg_engagement = 0
         
         if total_sessions > 0:
-        # ✅ CORRECCIÓN: Calcular completion REAL por sesión según tipo de material
+            # ✅ CORRECCIÓN: Calcular completion REAL usando los totales de la BD
             total_completion = 0
             for sess in sessions:
                 if obj.material_type == 'flashcard':
                     flashcard_events = sess.events.filter(event_type='flashcard_flip')
-                    unique_flashcards = set()
-                    for event in flashcard_events:
-                        if event.element_id:
-                            unique_flashcards.add(event.element_id)
-                    session_completion = (len(unique_flashcards) / 20) * 100
+                    unique_flashcards = {e.element_id for e in flashcard_events if e.element_id}
+                    
+                    # Usar total guardado o default
+                    total = obj.total_flashcards if obj.total_flashcards > 0 else 20
+                    session_completion = (len(unique_flashcards) / total) * 100
+                    
                 elif obj.material_type in ['decision_tree', 'mind_map']:
                     node_events = sess.events.filter(event_type='node_expand')
-                    unique_nodes = set()
-                    for event in node_events:
-                        if event.element_id:
-                            unique_nodes.add(event.element_id)
-                    session_completion = min(100, (len(unique_nodes) / 15) * 100)
+                    unique_nodes = {e.element_id for e in node_events if e.element_id}
+                    
+                    # Usar total guardado o default
+                    total = obj.total_nodes if obj.total_nodes > 0 else 15
+                    session_completion = min(100, (len(unique_nodes) / total) * 100)
                 else:
                     session_completion = sess.max_scroll_depth or 0
+                
                 total_completion += session_completion
             
             avg_completion = total_completion / total_sessions
@@ -773,12 +773,8 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
                         <ul style="margin-top: 5px;">
                             <li><em>Resumen Estructurado:</em> El usuario ha llegado (scrolleado) hasta el final del texto generado.</li>
                             <li><em>Mapas Conceptuales / Árboles:</em> El usuario ha expandido todos los nodos interactivos hasta el último nivel.</li>
-                            <li><em>Flashcards:</em> El usuario ha recorrido y volteado (flip) las 20 tarjetas del set.</li>
+                            <li><em>Flashcards:</em> El usuario ha recorrido y volteado (flip) las {obj.total_flashcards} tarjetas del set.</li>
                         </ul>
-                    </li>
-                    <li><strong>Score de Engagement (0-100):</strong> Índice calculado combinando métricas ponderadas:
-                        <br><code>Score = (TiempoActivo/5min * 40) + (Interacciones/50 * 30) + (ProfundidadScroll * 0.2) + (Si Completó * 10)</code>
-                        <br><em>Nota: El tiempo activo se satura a los 5 minutos (300s) y las interacciones a 50 eventos.</em>
                     </li>
                 </ul>
             </div>
@@ -809,23 +805,25 @@ class UserDidacticMaterialAdmin(admin.ModelAdmin):
                 sess_active = f"{sess.active_time_seconds // 60}m {sess.active_time_seconds % 60}s"
                 sess_interactions = sess.total_interactions
                 
-                # ✅ CORRECCIÓN: Calcular completion real
+                # ✅ CORRECCIÓN: Calcular completion real para cada fila de la tabla
                 if obj.material_type == 'flashcard':
                     flashcard_events = sess.events.filter(event_type='flashcard_flip')
-                    unique_flashcards = set()
-                    for event in flashcard_events:
-                        if event.element_id:
-                            unique_flashcards.add(event.element_id)
-                    scroll_depth = (len(unique_flashcards) / 20) * 100
+                    unique_flashcards = {e.element_id for e in flashcard_events if e.element_id}
+                    
+                    total = obj.total_flashcards if obj.total_flashcards > 0 else 20
+                    scroll_depth = (len(unique_flashcards) / total) * 100
+                    
                 elif obj.material_type in ['decision_tree', 'mind_map']:
                     node_events = sess.events.filter(event_type='node_expand')
-                    unique_nodes = set()
-                    for event in node_events:
-                        if event.element_id:
-                            unique_nodes.add(event.element_id)
-                    scroll_depth = min(100, (len(unique_nodes) / 15) * 100)
+                    unique_nodes = {e.element_id for e in node_events if e.element_id}
+                    
+                    total = obj.total_nodes if obj.total_nodes > 0 else 15
+                    scroll_depth = min(100, (len(unique_nodes) / total) * 100)
                 else:
                     scroll_depth = sess.max_scroll_depth or 0
+                
+                # Limitar a 100% visualmente
+                scroll_depth = min(100.0, scroll_depth)
                 
                 sess_score = sess.engagement_score()
                 sess_score_color = '#28a745' if sess_score > 70 else '#ffc107' if sess_score > 40 else '#dc3545'
@@ -1107,42 +1105,28 @@ class StudySessionAdmin(admin.ModelAdmin):
     
     def completion_badge(self, obj):
         """
-        ✅ Muestra el porcentaje de completitud REAL según el tipo de material
+        ✅ Muestra el porcentaje de completitud REAL según BD
         """
         material = obj.material
+        completion = 0
         
-        # Calcular completion según tipo de material
         if material.material_type == 'flashcard':
             # Contar flashcards únicas volteadas
             flashcard_events = obj.events.filter(event_type='flashcard_flip')
-            unique_flashcards = set()
-            for event in flashcard_events:
-                if event.element_id:
-                    unique_flashcards.add(event.element_id)
+            unique_flashcards = {e.element_id for e in flashcard_events if e.element_id}
             
-            completion = (len(unique_flashcards) / 20) * 100  # 20 flashcards total
+            # ✅ Usar total guardado en BD
+            total = material.total_flashcards if material.total_flashcards > 0 else 20
+            completion = (len(unique_flashcards) / total) * 100
             
         elif material.material_type in ['decision_tree', 'mind_map']:
             # Contar nodos únicos expandidos
             node_events = obj.events.filter(event_type='node_expand')
-            unique_nodes = set()
-            for event in node_events:
-                if event.element_id:
-                    unique_nodes.add(event.element_id)
+            unique_nodes = {e.element_id for e in node_events if e.element_id}
             
-            # Estimar total de nodos (usar 15 como default si no se puede determinar)
-            try:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(material.html_content, 'html.parser')
-                all_nodes = soup.find_all('g', class_='arbol-nodo')
-                if not all_nodes:
-                    all_nodes = soup.find_all(attrs={'data-node': True})
-                
-                total_nodes = max(1, len(all_nodes) - 1)  # Excluir raíz
-                completion = (len(unique_nodes) / total_nodes) * 100
-            except:
-                # Fallback: usar estimación
-                completion = (len(unique_nodes) / 15) * 100
+            # ✅ Usar total guardado en BD
+            total = material.total_nodes if material.total_nodes > 0 else 15
+            completion = (len(unique_nodes) / total) * 100
             
         else:
             # Para resúmenes, usar scroll depth
@@ -1153,20 +1137,15 @@ class StudySessionAdmin(admin.ModelAdmin):
         
         # Iconos y colores según el porcentaje
         if completion >= 90:
-            icon = '✅'
-            color = 'success'
+            icon = '✅'; color = 'success'
         elif completion >= 70:
-            icon = '🟡'
-            color = 'warning'
+            icon = '🟡'; color = 'warning'
         elif completion >= 50:
-            icon = '🟠'
-            color = 'warning'
+            icon = '🟠'; color = 'warning'
         elif completion > 0:
-            icon = '🔴'
-            color = 'danger'
+            icon = '🔴'; color = 'danger'
         else:
-            icon = '⚫'
-            color = 'secondary'
+            icon = '⚫'; color = 'secondary'
         
         return format_html(
             '{} <span class="badge badge-{}">{:.1f}%</span>',
