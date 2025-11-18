@@ -301,7 +301,7 @@ class InitialQuizAdmin(admin.ModelAdmin):
         'questions_count',
         'validation_status',
         'created_at_formatted',
-        'questions_preview'
+        'questions_summary' # <--- CAMBIO: Usar summary en lugar de preview completo en la lista
     ]
     
     list_filter = ['text__topic', 'text__difficulty', 'created_at']
@@ -311,7 +311,7 @@ class InitialQuizAdmin(admin.ModelAdmin):
         'text',
         'questions_json',
         'created_at',
-        'questions_preview',
+        'questions_preview', # <--- Mantenemos el completo en el detalle
         'validation_result'
     ]
     
@@ -329,29 +329,86 @@ class InitialQuizAdmin(admin.ModelAdmin):
         return obj.text.title
     text_title.short_description = 'Texto'
     
-    def questions_count(self, obj):
-        """Contador de preguntas"""
+    def _get_questions_safe(self, obj):
+        """Helper para obtener preguntas de forma segura (dict o list)"""
         try:
-            count = len(obj.questions_json.get('questions', []))
-            return format_html(
-                '<span class="badge badge-primary">{} preguntas</span>',
-                count
-            )
+            data = obj.questions_json
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict):
+                return data.get('questions', [])
+            return []
         except:
-            return format_html('<span class="badge badge-danger">Error en JSON</span>')
+            return []
+
+    def questions_count(self, obj):
+        """Contador de preguntas - Safe"""
+        questions = self._get_questions_safe(obj)
+        count = len(questions)
+        
+        color = 'primary' if count > 0 else 'warning'
+        return format_html(
+            '<span class="badge badge-{}">{} preguntas</span>',
+            color, count
+        )
     questions_count.short_description = 'Total'
     
     def created_at_formatted(self, obj):
         return obj.created_at.strftime('%d/%m/%Y %H:%M')
     created_at_formatted.short_description = 'Creado'
     
-    def questions_preview(self, obj):
-        """Vista previa de las preguntas en formato HTML"""
+    def questions_summary(self, obj):
+        """
+        Vista RESUMIDA para el Dashboard/Lista:
+        Solo muestra la PRIMERA pregunta para ahorrar espacio.
+        """
         try:
-            questions = obj.questions_json.get('questions', [])
+            questions = self._get_questions_safe(obj)
             
             if not questions:
-                return format_html('<p class="text-muted">No hay preguntas disponibles</p>')
+                return format_html('<span class="text-muted">Sin preguntas</span>')
+            
+            # Tomamos solo la primera pregunta
+            q = questions[0]
+            total_questions = len(questions)
+            remaining = total_questions - 1
+            
+            # Construimos HTML compacto para la lista
+            html = f'''
+            <div style="max-width: 400px; border: 1px solid #ddd; border-radius: 4px; padding: 8px; background: #fff;">
+                <div style="font-weight: bold; color: #333; font-size: 0.9em; margin-bottom: 5px;">
+                    P1: {q.get('pregunta', 'Sin texto')[:100]}...
+                </div>
+                <div style="font-size: 0.85em; color: #666;">
+                    <span style="color: green;">✅ {q.get('respuesta_correcta', '?')}</span>
+                </div>
+            '''
+            
+            if remaining > 0:
+                html += f'''
+                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #eee; font-size: 0.8em; color: #007bff;">
+                    ➕ <strong>{remaining}</strong> preguntas más (ver detalle)
+                </div>
+                '''
+                
+            html += '</div>'
+            return format_html(html)
+            
+        except Exception as e:
+            return format_html('<span style="color:red;">Error: {}</span>', str(e))
+            
+    questions_summary.short_description = 'Pregunta Inicial'
+
+    def questions_preview(self, obj):
+        """
+        Vista COMPLETA para el Detalle (Readonly field):
+        Muestra TODAS las preguntas con scroll.
+        """
+        try:
+            questions = self._get_questions_safe(obj)
+            
+            if not questions:
+                return format_html('<p class="text-muted">No hay preguntas disponibles o el formato es incorrecto.</p>')
             
             html = '<div style="max-height: 600px; overflow-y: auto;">'
             
@@ -391,7 +448,6 @@ class InitialQuizAdmin(admin.ModelAdmin):
                 '''
             
             html += '</div>'
-            
             return format_html(html)
         
         except Exception as e:
@@ -399,41 +455,33 @@ class InitialQuizAdmin(admin.ModelAdmin):
                 '<div class="alert alert-danger">Error al mostrar preview: {}</div>',
                 str(e)
             )
-   
-        html += '</div>'
-        
-        return format_html(html)
-    questions_preview.short_description = 'Vista Previa de Preguntas'
+    questions_preview.short_description = 'Vista Previa de Preguntas (Completa)'
     
     def validation_status(self, obj):
         """Muestra si el quiz tiene estructura válida"""
-        is_valid, message = obj.validate_structure()
-        
-        if is_valid:
-            return format_html(
-                '<span style="color: green; font-size: 16px;" title="{}">✅</span>',
-                message
-            )
-        return format_html(
-            '<span style="color: red; font-size: 16px;" title="{}">❌</span>',
-            message
-        )
+        try:
+            is_valid, message = obj.validate_structure()
+            if is_valid:
+                return format_html('<span style="color: green; font-size: 16px;" title="{}">✅</span>', message)
+            return format_html('<span style="color: red; font-size: 16px;" title="{}">❌</span>', message)
+        except AttributeError:
+             return format_html('<span>⚠️ Check Model</span>')
     validation_status.short_description = 'Válido'
     
     def validation_result(self, obj):
         """Resultado detallado de validación"""
-        is_valid, message = obj.validate_structure()
-        
-        color = 'success' if is_valid else 'danger'
-        icon = '✅' if is_valid else '❌'
-        
-        return format_html(
-            '<div class="alert alert-{}" role="alert">'
-            '<h4 class="alert-heading">{} Validación de Estructura</h4>'
-            '<p>{}</p>'
-            '</div>',
-            color, icon, message
-        )
+        try:
+            is_valid, message = obj.validate_structure()
+            color = 'success' if is_valid else 'danger'
+            icon = '✅' if is_valid else '❌'
+            return format_html(
+                '<div class="alert alert-{}" role="alert">'
+                '<h4 class="alert-heading">{} Validación de Estructura</h4>'
+                '<p>{}</p>'
+                '</div>', color, icon, message
+            )
+        except AttributeError:
+            return format_html('<div class="alert alert-warning">Método validate_structure no encontrado en modelo.</div>')
     validation_result.short_description = 'Resultado de Validación'
 
 @admin.register(QuizAttempt)
