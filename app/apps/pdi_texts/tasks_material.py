@@ -353,7 +353,7 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         )
         
         logger.info(f"Material generado exitosamente (ID: {material.id})")
-        logger.info(f"📊 Totales guardados -> Nodos padres: {total_nodes}, Flashcards: {total_flashcards}")
+        logger.info(f"Totales guardados -> Nodos padres: {total_nodes}, Flashcards: {total_flashcards}")
         
         return {
             'status': 'success',
