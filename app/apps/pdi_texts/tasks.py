@@ -8,6 +8,7 @@ from langchain.prompts import PromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
+from google.genai import types
 
 from apps.pdi_texts.models import PDIText, InitialQuiz
 
