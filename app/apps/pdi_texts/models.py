@@ -244,24 +244,49 @@ class QuizAttempt(models.Model):
         related_name='quiz_attempts',
         verbose_name="Alumno"
     )
-    
+
+    # --- CAMBIOS AQUÍ ---
+    # 1. Permitir que 'quiz' sea nulo (para quizzes adaptativos que no son InitialQuiz)
     quiz = models.ForeignKey(
         InitialQuiz,
         on_delete=models.CASCADE,
         related_name='attempts',
-        verbose_name="Cuestionario"
+        verbose_name="Cuestionario Inicial",
+        null=True, blank=True  # <--- IMPORTANTE
+    )
+
+    # 2. Agregar referencia directa al Texto (para saber de qué texto es el intento)
+    # NOTA: En tu modelo actual no veo este campo directo, solo a través de 'quiz'.
+    # Vamos a agregarlo para facilitar las cosas.
+    pdi_text = models.ForeignKey(
+        PDIText,
+        on_delete=models.CASCADE,
+        related_name='all_attempts',
+        verbose_name="Texto PDI",
+        null=True # Temporalmente nullable para migración
     )
     
+    # 3. Campo quiz_type (NUEVO)
+    quiz_type = models.CharField(
+        max_length=20, 
+        choices=[('initial', 'Initial'), ('adaptive', 'Adaptive'), ('post_test', 'Post Test')],
+        default='initial',
+        verbose_name="Tipo de Quiz"
+    )
+
     attempt_number = models.IntegerField(
         verbose_name="Número de Intento",
-        help_text="1, 2, 3..."
+        help_text="1, 2, 3...",
+        default=1
     )
     
+    # 4. Mantener nombre 'score' (es más simple)
     score = models.FloatField(
         verbose_name="Puntuación",
         help_text="Porcentaje de respuestas correctas (0-100)"
     )
     
+    # 5. Mantener nombre 'answers_json'
     answers_json = models.JSONField(
         verbose_name="Respuestas (JSON)",
         help_text="Array de objetos: [{question_id, selected_answer, is_correct}]"
@@ -269,13 +294,14 @@ class QuizAttempt(models.Model):
     
     weak_topics = models.JSONField(
         verbose_name="Temas Débiles",
-        help_text="Lista de temas donde falló: ['Filtros Gaussianos', 'Canny']",
+        help_text="Lista de temas donde falló",
         default=list
     )
     
     time_spent_seconds = models.IntegerField(
         verbose_name="Tiempo Empleado (segundos)",
-        help_text="Tiempo que tardó en completar el cuestionario"
+        help_text="Tiempo que tardó en completar el cuestionario",
+        default=0
     )
     
     created_at = models.DateTimeField(
@@ -288,21 +314,6 @@ class QuizAttempt(models.Model):
         verbose_name = 'Intento de Cuestionario'
         verbose_name_plural = 'Intentos de Cuestionarios'
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', '-created_at']),
-            models.Index(fields=['quiz', 'user']),
-        ]
-    
-    def __str__(self):
-        return f"{self.user.email} - {self.quiz.text.title} - Intento #{self.attempt_number} ({self.score}%)"
-    
-    def passed(self):
-        """Verifica si aprobó (score >= 80%)"""
-        return self.score >= 80.0
-    
-    def get_answers(self):
-        """Retorna las respuestas como lista de Python"""
-        return self.answers_json if isinstance(self.answers_json, list) else []
 
 
 class UserProfile(models.Model):
