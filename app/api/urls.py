@@ -12,6 +12,7 @@ from api.views import (
     UserLoginView,
     UserLogoutView,
     UserProfileView,
+    UserActivePathsView,
 )
 
 from apps.pdi_texts.views import (
@@ -50,6 +51,8 @@ urlpatterns = [
     path('auth/logout/', UserLogoutView.as_view(), name='logout'),
     path('auth/profile/', UserProfileView.as_view(), name='profile'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+    path('user/paths/', UserActivePathsView.as_view(), name='user-paths'),
     
     # Router de ViewSets (al final)
     path('', include(router.urls)),

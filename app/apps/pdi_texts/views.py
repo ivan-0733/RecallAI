@@ -254,10 +254,10 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         # ---------------------------------------------------------
         attempt = QuizAttempt.objects.create(
             user=user,
-            text=text,
-            quiz_type=quiz_type, # Asegúrate que tu modelo soporte este string o usa 'initial'/'generated'
-            score=final_score,
-            answers=detailed_answers, # JSON detallado
+            pdi_text=text,      # <--- Nombre correcto en tu modelo
+            quiz_type=quiz_type, # <--- Campo nuevo que agregamos
+            score_percent=final_score, # <--- Nombre correcto en tu modelo
+            answers=detailed_answers,
             time_spent_seconds=time_spent,
             created_at=timezone.now()
         )

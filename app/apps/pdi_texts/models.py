@@ -424,6 +424,12 @@ class MaterialEffectiveness(models.Model):
         verbose_name="Score Antes",
         help_text="Puntuación antes de usar el material"
     )
+
+    quiz_type = models.CharField(
+        max_length=20, 
+        choices=[('initial', 'Initial'), ('adaptive', 'Adaptive'), ('post_test', 'Post Test')],
+        default='initial'
+    )
     
     quiz_after_score = models.FloatField(
         verbose_name="Score Después",

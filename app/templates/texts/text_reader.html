@@ -400,15 +400,16 @@
         return badges[difficulty] || '';
     }
 
-    // Ir a cuestionario
+// Ir a cuestionario
     $('#startQuizBtn').on('click', function() {
         clearInterval(timerInterval);
         const readingTime = Math.floor((Date.now() - startTime) / 1000);
         
-        // Guardar tiempo de lectura en localStorage para usarlo en el quiz
+        // Guardar tiempo de lectura
         localStorage.setItem('reading_time', readingTime);
         
-        window.location.href = `/quiz/${textId}/`;
+        // CORRECCIÓN: Ir explícitamente a la ruta de "initial-quiz" (Pre-Test)
+        window.location.href = `/text/${textId}/initial-quiz/`;
     });
 </script>
 {% endblock %}
