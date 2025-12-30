@@ -14,6 +14,14 @@ from apps.pdi_texts.recommendation import get_recommended_material
 from apps.pdi_texts.tasks_material import generate_didactic_material
 from apps.pdi_texts.models import MaterialRequest, UserDidacticMaterial
 
+from apps.pdi_texts.utils import log_session_summary, log_quiz_items
+from apps.pdi_texts.models import StudentLearningPath, AdaptiveQuiz
+
+from django.utils import timezone
+from apps.pdi_texts.models import StudentLearningPath, AdaptiveQuiz, QuizAttempt, UserDidacticMaterial
+from apps.pdi_texts.utils import log_session_summary, log_quiz_items
+from apps.pdi_texts.tasks_material import generate_didactic_material
+
 from apps.pdi_texts.models import PDIText, InitialQuiz, QuizAttempt, UserProfile
 from apps.pdi_texts.serializers import (
     PDITextListSerializer,
@@ -167,141 +175,173 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'], url_path='submit-quiz')
     def submit_quiz(self, request, pk=None):
         """
-        Evaluar respuestas del cuestionario
-        POST /api/texts/{id}/submit-quiz/
-        Body: {
-            "answers": [{"question_index": 0, "selected_answer": "A"}, ...],
-            "time_spent_seconds": 600
-        }
+        Maneja el envío de cualquier quiz (Inicial o Adaptativo).
+        Orquesta el flujo: Evaluar -> Log CSV -> Guardar DB -> Disparar Siguiente Paso.
         """
         text = self.get_object()
+        user = request.user
         
-        if not text.has_quiz:
-            return Response(
-                {'error': 'Este texto no tiene cuestionario'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Datos recibidos del frontend
+        answers = request.data.get('answers', []) # Lista de {question_index: 0, answer: 'A'}
+        time_spent = request.data.get('time_spent', 0)
         
-        quiz = text.initial_quiz
+        # Determinar tipo de quiz
+        quiz_type = request.data.get('quiz_type', 'initial') # 'initial' o 'adaptive'
+        adaptive_quiz_id = request.data.get('quiz_id') # Solo si es adaptive
+
+        # ---------------------------------------------------------
+        # 1. RECUPERAR PREGUNTAS Y RESPUESTAS CORRECTAS
+        # ---------------------------------------------------------
+        questions_data = []
         
-        # Validar datos de entrada
-        answers = request.data.get('answers', [])
-        time_spent = request.data.get('time_spent_seconds', 0)
+        if quiz_type == 'initial':
+            if not hasattr(text, 'initial_quiz'):
+                return Response({'error': 'No hay quiz inicial para este texto'}, status=404)
+            # El InitialQuiz tiene un método o estructura para obtener preguntas
+            questions_data = text.initial_quiz.get_questions() 
         
-        if not answers:
-            return Response(
-                {'error': 'Debes proporcionar respuestas'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if len(answers) != quiz.total_questions:
-            return Response(
-                {'error': f'Se esperaban {quiz.total_questions} respuestas, recibidas: {len(answers)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Obtener preguntas del quiz
-        questions = quiz.get_questions()
-        
-        # Evaluar respuestas
+        elif quiz_type == 'adaptive':
+            quiz_obj = get_object_or_404(AdaptiveQuiz, id=adaptive_quiz_id, user=user)
+            questions_data = quiz_obj.questions_json # Es una lista de dicts
+            
+        # Validar que tengamos 20 preguntas (Regla de Oro)
+        if len(questions_data) != 20:
+             # Nota: Podrías lanzar error, pero para robustez lo dejamos pasar con warning
+             print(f"⚠️ ADVERTENCIA: El quiz tiene {len(questions_data)} preguntas, se esperaban 20.")
+
+        # ---------------------------------------------------------
+        # 2. CALCULAR PUNTAJE Y TEMAS DÉBILES
+        # ---------------------------------------------------------
+        score = 0
         correct_count = 0
         detailed_answers = []
-        incorrect_topics = []
-        
-        for answer in answers:
-            question_index = answer.get('question_index')
-            selected_answer = answer.get('selected_answer', '').upper()
+        weak_topics = []
+        binary_results = [] # Para el CSV [1,0,1...]
+
+        # Iterar sobre las 20 preguntas
+        for i, question in enumerate(questions_data):
+            # Buscar la respuesta del usuario para este índice
+            user_ans_obj = next((a for a in answers if a.get('question_index') == i), None)
+            user_response = user_ans_obj.get('selected_option') if user_ans_obj else None
             
-            if question_index is None or question_index >= len(questions):
-                continue
-            
-            question = questions[question_index]
-            correct_answer = question.get('respuesta_correcta', '').upper()
-            
-            is_correct = selected_answer == correct_answer
+            # Comparar (Asumiendo que 'respuesta_correcta' es 'A', 'B', etc.)
+            correct_option = question.get('respuesta_correcta')
+            is_correct = (user_response == correct_option)
             
             if is_correct:
                 correct_count += 1
+                binary_results.append(1)
             else:
-                # Agregar tema a lista de temas débiles
-                topic = question.get('tema', 'Desconocido')
-                incorrect_topics.append(topic)
-            
+                binary_results.append(0)
+                # Agregar tema a lista de débiles si falló
+                if 'tema' in question:
+                    weak_topics.append(question['tema'])
+
             detailed_answers.append({
-                'question_index': question_index,
                 'question': question.get('pregunta'),
-                'opciones': question.get('opciones', []),
-                'selected_answer': selected_answer,
-                'correct_answer': correct_answer,
+                'user_answer': user_response,
+                'correct_answer': correct_option,
                 'is_correct': is_correct,
-                'topic': question.get('tema'),
-                'explanation': question.get('explicacion') if not is_correct else None
+                'explanation': question.get('explicacion'),
+                'topic': question.get('tema')
             })
-        
-        # Calcular score
-        score = (correct_count / quiz.total_questions) * 100
-        
-        # Agrupar temas débiles por frecuencia
-        topic_counter = Counter(incorrect_topics)
-        weak_topics_sorted = [topic for topic, count in topic_counter.most_common()]
-        
-        # Calcular número de intento
-        previous_attempts = QuizAttempt.objects.filter(
-            user=request.user,
-            quiz=quiz
-        ).count()
-        
-        attempt_number = previous_attempts + 1
-        
-        # Guardar intento
+
+        # Calcular Score final (0 a 100)
+        final_score = (correct_count / len(questions_data)) * 100 if questions_data else 0
+
+        # ---------------------------------------------------------
+        # 3. GUARDAR INTENTO EN BASE DE DATOS (QuizAttempt)
+        # ---------------------------------------------------------
         attempt = QuizAttempt.objects.create(
-            user=request.user,
-            quiz=quiz,
-            attempt_number=attempt_number,
-            score=score,
-            answers_json=detailed_answers,
-            weak_topics=weak_topics_sorted,
-            time_spent_seconds=time_spent
+            user=user,
+            text=text,
+            quiz_type=quiz_type, # Asegúrate que tu modelo soporte este string o usa 'initial'/'generated'
+            score=final_score,
+            answers=detailed_answers, # JSON detallado
+            time_spent_seconds=time_spent,
+            created_at=timezone.now()
         )
+
+        # ---------------------------------------------------------
+        # 4. LÓGICA ESPECÍFICA DEL FLUJO (State Machine)
+        # ---------------------------------------------------------
         
-        profile, created = UserProfile.objects.get_or_create(user=request.user)
-        profile.update_weak_topics(weak_topics_sorted)
-        profile.add_study_time(time_spent // 60)  # convertir a minutos
-        
-        # Actualizar last_study_date y study_streak
-        today = timezone.now().date()
-        
-        if profile.last_study_date:
-            # Calcular días desde último estudio
-            days_since_last_study = (today - profile.last_study_date).days
+        next_action = 'none'
+        message = ''
+
+        # --- CASO A: PRE-TEST (INICIO DEL FLUJO) ---
+        if quiz_type == 'initial':
+            # 1. Crear el Learning Path con los 20 temas FIJOS
+            # Extraemos los temas en orden para congelarlos
+            fixed_topics = [q.get('tema', f'Tema {idx+1}') for idx, q in enumerate(questions_data)]
             
-            if days_since_last_study == 0:
-                # Mismo día, no hacer nada con el streak
-                pass
-            elif days_since_last_study == 1:
-                # Día consecutivo, incrementar racha
-                profile.study_streak += 1
+            path, created = StudentLearningPath.objects.get_or_create(
+                user=user,
+                text=text,
+                defaults={
+                    'fixed_topics_order': fixed_topics,
+                    'current_session': 0 
+                }
+            )
+            
+            # 2. LOG CSV (Pre-test se considera Sesión 0)
+            log_quiz_items(user.id, text.id, 'PRE_TEST', 0, final_score, binary_results)
+            log_session_summary(user.id, text.id, 0, final_score, weak_topics)
+            
+            # 3. TRIGGER: Generar Material Sesión 0
+            generate_didactic_material.delay(
+                user_id=user.id,
+                attempt_id=attempt.id,
+                material_type='flashcard' # Primer material siempre Flashcards
+            )
+            
+            next_action = 'wait_for_material'
+            message = 'Diagnóstico completado. Generando Plan de Estudio...'
+
+        # --- CASO B: QUIZ ADAPTATIVO (DURANTE EL FLUJO) ---
+        elif quiz_type == 'adaptive':
+            # Recuperar el path asociado al quiz
+            path = quiz_obj.learning_path
+            current_session = path.current_session
+            
+            # 1. LOG CSV
+            log_quiz_items(user.id, text.id, 'ADAPTIVE', current_session, final_score, binary_results)
+            log_session_summary(user.id, text.id, current_session, final_score, weak_topics)
+            
+            # 2. ACTUALIZAR SESIÓN
+            # El usuario acaba de terminar el quiz de la sesión X, ahora pasa a X+1
+            path.current_session += 1
+            path.save()
+            
+            # 3. DECIDIR SIGUIENTE PASO
+            MAX_SESSIONS = 3 # Configura esto según tu experimento
+            
+            if path.current_session >= MAX_SESSIONS:
+                # Fin del ciclo -> Ir a Post-Test
+                path.is_completed = True
+                path.save()
+                next_action = 'go_to_post_test'
+                message = 'Ciclo de estudio finalizado. Por favor realiza el Examen Final.'
             else:
-                # Rompió la racha, reiniciar a 1
-                profile.study_streak = 1
-        else:
-            # Primera vez que estudia
-            profile.study_streak = 1
-        
-        profile.last_study_date = today
-        profile.save()      
-        
-        # Preparar respuesta
+                # Continúa el ciclo -> Generar siguiente material
+                # Rotación simple de material: Flashcard -> Mapa Mental -> Flashcard...
+                next_material = 'mind_map' if path.current_session % 2 != 0 else 'flashcard'
+                
+                generate_didactic_material.delay(
+                    user_id=user.id,
+                    attempt_id=attempt.id,
+                    material_type=next_material
+                )
+                next_action = 'wait_for_material'
+                message = f'Sesión {current_session} finalizada. Generando material para Sesión {path.current_session}...'
+
         return Response({
-            'attempt': QuizAttemptSerializer(attempt).data,
-            'score': score,
+            'status': 'success',
+            'score': final_score,
             'correct_count': correct_count,
-            'total_questions': quiz.total_questions,
-            'passed': attempt.passed(),
-            'weak_topics': weak_topics_sorted,
-            'topic_errors': dict(topic_counter),
-            'detailed_answers': detailed_answers,
-            'message': '¡Excelente! Has aprobado' if attempt.passed() else 'Necesitas reforzar algunos temas'
+            'weak_topics': weak_topics,
+            'next_action': next_action, # El frontend debe leer esto para saber si mostrar loading o redirigir
+            'message': message
         })
     
     @action(detail=False, methods=['post'], url_path='generate-material')

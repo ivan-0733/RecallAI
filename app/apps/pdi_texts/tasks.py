@@ -190,3 +190,95 @@ IMPORTANTE:
             'text_id': text_id,
             'message': f'❌ Error al generar cuestionario: {str(exc)}'
         }
+    
+
+    # ... (Imports existentes) ...
+from apps.pdi_texts.models import PDIText, InitialQuiz, AdaptiveQuiz, StudentLearningPath, UserDidacticMaterial
+import json
+
+# ... (Task existing generate_initial_quiz ...)
+
+@shared_task(bind=True, max_retries=3)
+def generate_adaptive_quiz_task(self, learning_path_id, material_id):
+    """
+    Genera un Quiz Adaptativo de EXACTAMENTE 20 preguntas.
+    Usa los 20 temas FIJOS del learning_path.
+    """
+    try:
+        path = StudentLearningPath.objects.get(id=learning_path_id)
+        material = UserDidacticMaterial.objects.get(id=material_id)
+        fixed_topics = path.fixed_topics_order  # LISTA DE 20 TEMAS MAESTROS
+        
+        # Construir Prompt Estricto
+        prompt = f"""
+        ERES UN EXPERTO EXAMINADOR ACADÉMICO.
+        
+        CONTEXTO:
+        El alumno está en la Sesión #{path.current_session}.
+        Acaba de estudiar un material sobre: {material.material_type}.
+        Temas débiles detectados recientemente: {material.weak_topics}
+        
+        TU MISIÓN:
+        Generar un cuestionario de EXACTAMENTE 20 PREGUNTAS.
+        
+        REGLA DE ORO - TEMAS FIJOS E INMUTABLES:
+        Debes generar EXACTAMENTE UNA pregunta para CADA UNO de los siguientes 20 temas, respetando ESTE ORDEN EXACTO:
+        {json.dumps(fixed_topics, ensure_ascii=False)}
+        
+        INSTRUCCIONES DE ADAPTABILIDAD:
+        1. Para los temas que coinciden con los 'temas débiles' del alumno: Haz la pregunta DIFÍCIL y conceptual.
+        2. Para los demás temas: Haz la pregunta de dificultad MEDIA.
+        3. El contenido debe relacionarse con el material estudiado ({material.material_type}) si es pertinente.
+        
+        FORMATO DE SALIDA (JSON estricto):
+        {{
+            "questions": [
+                {{
+                    "pregunta": "¿Pregunta sobre el TEMA 1...?",
+                    "opciones": ["A) ..", "B) ..", "C) ..", "D) .."],
+                    "respuesta_correcta": "A",
+                    "tema": "{fixed_topics[0]}", 
+                    "explicacion": "..."
+                }},
+                ... (así sucesivamente hasta el tema 20)
+            ]
+        }}
+        
+        IMPORTANTE: Devuelve SOLO el JSON. Asegúrate de que "tema" sea idéntico al de la lista proporcionada.
+        """
+        
+        # Llamar a Gemini (reutilizando tu configuración existente)
+        model = genai.GenerativeModel('gemini-2.5-pro')
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Limpieza JSON (reutilizando tu lógica)
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+            
+        quiz_data = json.loads(response_text)
+        questions = quiz_data.get('questions', [])
+        
+        # Validación de seguridad: deben ser 20
+        if len(questions) != 20:
+            # Fallback de emergencia o error
+            raise Exception(f"Gemini generó {len(questions)} preguntas en lugar de 20.")
+            
+        # Guardar AdaptiveQuiz
+        quiz = AdaptiveQuiz.objects.create(
+            user=path.user,
+            text=path.text,
+            learning_path=path,
+            based_on_material=material,
+            session_number=path.current_session,
+            questions_json=questions
+        )
+        
+        return {'status': 'success', 'quiz_id': quiz.id, 'message': 'Quiz adaptativo generado'}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        return {'status': 'error', 'message': str(exc)}

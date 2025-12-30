@@ -11,7 +11,8 @@ from api.serializers import (
     UserSerializer
 )
 from apps.application_user.models import User
-
+# Importamos el modelo del path para que el dashboard sepa en qué sesión va
+from apps.pdi_texts.models import StudentLearningPath 
 
 class UserRegistrationView(generics.CreateAPIView):
     """
@@ -104,3 +105,37 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     
     def get_object(self):
         return self.request.user
+
+
+class UserActivePathsView(APIView):
+    """
+    NUEVA VISTA: Devuelve el estado del flujo experimental del usuario.
+    Permite al dashboard saber si debe mostrar "Sesión 0", "Sesión 1", "Post-Test", etc.
+    GET /api/user/paths/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Buscar todos los procesos de aprendizaje activos o terminados del usuario
+        paths = StudentLearningPath.objects.filter(user=request.user)
+        
+        data = []
+        for path in paths:
+            status_label = "En Progreso"
+            if path.current_session == 0:
+                status_label = "Diagnóstico (Sesión 0)"
+            elif path.is_completed:
+                status_label = "Listo para Post-Test"
+            else:
+                status_label = f"Sesión {path.current_session}"
+
+            data.append({
+                'text_id': path.text.id,
+                'text_title': path.text.title,
+                'current_session': path.current_session,
+                'is_completed': path.is_completed,
+                'status_label': status_label,
+                'started_at': path.created_at
+            })
+            
+        return Response(data, status=status.HTTP_200_OK)

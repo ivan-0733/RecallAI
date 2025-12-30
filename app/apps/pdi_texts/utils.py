@@ -142,3 +142,90 @@ def estimate_reading_time(text: str) -> int:
     minutes = max(5, round(word_count / 200))
     
     return minutes
+
+# ... (Mantén todo tu código anterior de pdf/txt intacto) ...
+
+# ========================================================
+# AGREGAR ESTO AL FINAL DEL ARCHIVO PARA LOGS CSV
+# ========================================================
+
+import csv
+import os
+import json
+from datetime import datetime
+from django.conf import settings
+
+# Definir rutas absolutas para los CSV en la raíz del proyecto
+CSV_SESSION_PATH = os.path.join(settings.BASE_DIR, 'GRUPO_2_CON_APP.csv')
+CSV_ITEM_PATH = os.path.join(settings.BASE_DIR, 'QUIZ_GRUPO2_CON_APP.csv')
+
+def initialize_csvs():
+    """
+    Crea los archivos CSV con sus encabezados si no existen.
+    Se debe llamar al inicio de la aplicación o la primera vez que se loguea.
+    """
+    # 1. CSV DE SESIONES (Resumen por intento/ciclo)
+    if not os.path.exists(CSV_SESSION_PATH):
+        try:
+            with open(CSV_SESSION_PATH, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # Estructura: User, Texto, Sesión (0,1,2...), Score, Temas Débiles, Fecha
+                writer.writerow(['user_id', 'text_id', 'session_order', 'score', 'weak_topics', 'timestamp'])
+        except Exception as e:
+            print(f"❌ Error creando CSV de Sesiones: {e}")
+
+    # 2. CSV DE ITEMS (Respuestas binarias 1/0 a cada pregunta)
+    if not os.path.exists(CSV_ITEM_PATH):
+        try:
+            with open(CSV_ITEM_PATH, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # Estructura: User, Texto, Tipo, Sesión, Score, item_1 ... item_20
+                header = ['user_id', 'text_id', 'quiz_type', 'session_number', 'score'] + [f'item_{i+1}' for i in range(20)]
+                writer.writerow(header)
+        except Exception as e:
+            print(f"❌ Error creando CSV de Items: {e}")
+
+def log_session_summary(user_id, text_id, session_order, score, weak_topics):
+    """
+    Registra el resumen de una sesión en GRUPO_2_CON_APP.csv
+    """
+    initialize_csvs() # Asegura que exista
+    try:
+        # Convertir lista de temas a string separado por pipes para que no rompa el CSV
+        topics_str = "|".join(weak_topics) if isinstance(weak_topics, list) else str(weak_topics)
+        
+        with open(CSV_SESSION_PATH, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                user_id, 
+                text_id, 
+                session_order, 
+                score, 
+                topics_str,
+                datetime.now().isoformat()
+            ])
+        print(f"✅ Log guardado en GRUPO_2_CON_APP.csv (Sesión {session_order})")
+    except Exception as e:
+        print(f"❌ Error escribiendo en CSV Session: {e}")
+
+def log_quiz_items(user_id, text_id, quiz_type, session_number, score, answers_vector):
+    """
+    Registra el vector de respuestas (1/0) en QUIZ_GRUPO2_CON_APP.csv
+    answers_vector: Lista de 20 enteros/booleanos [1, 0, 1, 1...]
+    """
+    initialize_csvs() # Asegura que exista
+    try:
+        # Validación estricta de longitud
+        if len(answers_vector) != 20:
+            print(f"⚠️ ALERTA: Vector de respuestas tiene {len(answers_vector)} items, se esperaban 20. Rellenando con 0.")
+            # Rellenar o cortar para evitar error de formato
+            answers_vector = (answers_vector + [0]*20)[:20]
+
+        row = [user_id, text_id, quiz_type, session_number, score] + answers_vector
+        
+        with open(CSV_ITEM_PATH, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(row)
+        print(f"✅ Log guardado en QUIZ_GRUPO2_CON_APP.csv ({quiz_type})")
+    except Exception as e:
+        print(f"❌ Error escribiendo en CSV Items: {e}")

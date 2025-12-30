@@ -354,6 +354,29 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         
         logger.info(f"Material generado exitosamente (ID: {material.id})")
         logger.info(f"Totales guardados -> Nodos padres: {total_nodes}, Flashcards: {total_flashcards}")
+
+        # ==========================================================
+        # TRIGGER AUTOMÁTICO: GENERAR EL QUIZ ADAPTATIVO SIGUIENTE
+        # ==========================================================
+        try:
+            # Buscamos si existe un Learning Path activo para este usuario/texto
+            from apps.pdi_texts.models import StudentLearningPath
+            path = StudentLearningPath.objects.get(user=user, text=text)
+            
+            # Importar la tarea nueva (importación local para evitar ciclos)
+            from apps.pdi_texts.tasks import generate_adaptive_quiz_task
+            
+            # Disparar tarea
+            generate_adaptive_quiz_task.delay(
+                learning_path_id=path.id,
+                material_id=material.id
+            )
+            logger.info(f"🚀 [FLUJO AUTOMÁTICO] Iniciada generación de Quiz Adaptativo para Sesión {path.current_session}")
+            
+        except StudentLearningPath.DoesNotExist:
+            logger.warning("⚠️ No se encontró Learning Path. Generación de material aislada (fuera de flujo).")
+            
+        # ==========================================================
         
         return {
             'status': 'success',

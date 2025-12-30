@@ -1217,3 +1217,54 @@ class HeatmapData(models.Model):
                 })
         
         return sorted(hot_zones, key=lambda z: z['intensity'], reverse=True)
+    
+
+    # ... (Tus modelos anteriores: PDIText, InitialQuiz, QuizAttempt, etc.) ...
+
+# ========================================================
+# NUEVOS MODELOS PARA EL FLUJO ADAPTATIVO
+# ========================================================
+
+class StudentLearningPath(models.Model):
+    """
+    Controla el estado del alumno y asegura que los temas sean INMUTABLES.
+    Se crea automáticamente al terminar el Initial Quiz.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.ForeignKey(PDIText, on_delete=models.CASCADE)
+    
+    # LISTA MAESTRA DE 20 TEMAS (Ordenados del 1 al 20 según el Initial Quiz)
+    fixed_topics_order = models.JSONField(
+        help_text="Lista estricta de los 20 temas extraídos del Initial Quiz. NO CAMBIA."
+    )
+    
+    current_session = models.IntegerField(default=0, help_text="0=Pre-Test, 1=Sesión 1, etc.")
+    is_completed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['user', 'text']
+        verbose_name = "Ruta de Aprendizaje"
+
+class AdaptiveQuiz(models.Model):
+    """
+    Cuestionarios intermedios generados por IA (SIEMPRE 20 PREGUNTAS).
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.ForeignKey(PDIText, on_delete=models.CASCADE)
+    learning_path = models.ForeignKey(StudentLearningPath, on_delete=models.CASCADE, related_name='adaptive_quizzes')
+    
+    # Vinculación con el material que acaba de estudiar
+    based_on_material = models.ForeignKey('UserDidacticMaterial', on_delete=models.CASCADE, null=True, blank=True)
+    
+    session_number = models.IntegerField(help_text="Corresponde al ciclo (1, 2, 3...)")
+    
+    questions_json = models.JSONField(
+        help_text="JSON con EXACTAMENTE 20 preguntas alineadas a fixed_topics_order"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Quiz Adaptativo"
+        ordering = ['session_number']

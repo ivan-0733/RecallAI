@@ -5,9 +5,7 @@
 {% block body_class %}sidebar-mini layout-fixed{% endblock %}
 
 {% block content %}
-<!-- Navbar -->
 <nav class="main-header navbar navbar-expand navbar-white navbar-light">
-    <!-- Left navbar links -->
     <ul class="navbar-nav">
         <li class="nav-item">
             <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
@@ -17,17 +15,14 @@
         </li>
     </ul>
 
-    <!-- Right navbar links -->
     <ul class="navbar-nav ml-auto">
-        <!-- Notifications Dropdown Menu -->
         <li class="nav-item dropdown">
             <a class="nav-link" data-toggle="dropdown" href="#" id="notificationDropdown">
                 <i class="far fa-bell"></i>
                 <span class="badge badge-warning navbar-badge" style="display: none;">0</span>
             </a>
             <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right" id="notificationMenu">
-                <!-- Se llenará dinámicamente -->
-            </div>
+                </div>
         </li>
         <li class="nav-item">
             <a class="nav-link" data-widget="fullscreen" href="#" role="button">
@@ -37,17 +32,13 @@
     </ul>
 </nav>
 
-<!-- Main Sidebar Container -->
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
-    <!-- Brand Logo -->
     <a href="/dashboard/" class="brand-link">
         <i class="fas fa-brain brand-image ml-3"></i>
         <span class="brand-text font-weight-light">RecallAI</span>
     </a>
 
-    <!-- Sidebar -->
     <div class="sidebar">
-        <!-- Sidebar user panel -->
         <div class="user-panel mt-3 pb-3 mb-3 d-flex">
             <div class="image">
                 <i class="fas fa-user-circle fa-2x text-white"></i>
@@ -57,7 +48,6 @@
             </div>
         </div>
 
-        <!-- Sidebar Menu -->
         <nav class="mt-2">
             <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
                 <li class="nav-item">
@@ -108,9 +98,7 @@
     </div>
 </aside>
 
-<!-- Content Wrapper -->
 <div class="content-wrapper">
-    <!-- Content Header -->
     <div class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
@@ -127,10 +115,8 @@
         </div>
     </div>
 
-    <!-- Main content -->
     <section class="content">
         <div class="container-fluid">
-            <!-- Info boxes -->
             <div class="row">
                 <div class="col-12 col-sm-6 col-md-3">
                     <div class="info-box">
@@ -170,14 +156,27 @@
                 </div>
             </div>
 
-            <!-- Indicador de Material en Proceso -->
             <div id="materialProcessingAlert" class="alert alert-info" style="display: none;">
                 <i class="fas fa-spinner fa-spin mr-2"></i>
-                <strong>Generando material didáctico en segundo plano...</strong>
-                <p class="mb-0 mt-1">Te notificaremos cuando esté listo (puede tomar 1-2 minutos)</p>
+                <strong>Generando material didáctico personalizado...</strong>
+                <p class="mb-0 mt-1">El sistema está creando tu siguiente sesión basada en tus errores. (Tiempo estimado: 1 min)</p>
             </div>
 
-            <!-- Bienvenida -->
+            <div class="row" id="activePathsContainer" style="display: none;">
+                <div class="col-md-12">
+                    <div class="card card-primary card-outline">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-road mr-2"></i>
+                                Tu Ruta de Aprendizaje (Flujo Activo)
+                            </h3>
+                        </div>
+                        <div class="card-body" id="activePathsBody">
+                            </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row">
                 <div class="col-md-12">
                     <div class="card">
@@ -194,8 +193,7 @@
                             </div>
                             
                             <div id="textsContainer" class="row" style="display: none;">
-                                <!-- Se llenará dinámicamente con JavaScript -->
-                            </div>
+                                </div>
                             
                             <div id="noTexts" class="alert alert-info" style="display: none;">
                                 <i class="fas fa-info-circle mr-2"></i>
@@ -210,7 +208,6 @@
     </section>
 </div>
 
-<!-- Footer -->
 <footer class="main-footer">
     <strong>Copyright &copy; 2024 <a href="#">RecallAI</a>.</strong>
     Todos los derechos reservados.
@@ -229,6 +226,8 @@
         "timeOut": "3000"
     };
 
+    let activePathsCache = {}; // Para guardar el estado de las sesiones
+
     // Verificar autenticación
     $(document).ready(function() {
         const token = localStorage.getItem('access_token');
@@ -242,15 +241,64 @@
         // Mostrar nombre del usuario
         if (user.first_name) {
             $('#userName').text(user.first_name + ' ' + user.last_name);
-            $('#userNameWelcome').text(user.first_name);
         }
         
-        // Cargar textos disponibles
-        loadTexts();
+        // 1. Primero cargar el progreso (Rutas activas)
+        loadActivePaths().then(() => {
+            // 2. Luego cargar los textos (para poder cruzar la info)
+            loadTexts();
+        });
         
         // Cargar estadísticas
         loadStats();
     });
+
+    // --- NUEVA FUNCIÓN: Cargar Rutas de Aprendizaje ---
+    function loadActivePaths() {
+        const token = localStorage.getItem('access_token');
+        return $.ajax({
+            url: '/api/user/paths/', // Endpoint que agregamos en views.py
+            type: 'GET',
+            headers: { 'Authorization': 'Bearer ' + token },
+            success: function(paths) {
+                activePathsCache = {};
+                let html = '';
+                
+                if (paths.length > 0) {
+                    $('#activePathsContainer').show();
+                    paths.forEach(path => {
+                        // Guardar en cache para usar al renderizar textos
+                        activePathsCache[path.text_id] = path;
+                        
+                        // Barra de progreso visual
+                        let progressPercent = 0;
+                        if (path.current_session === 0) progressPercent = 10;
+                        else if (path.current_session === 1) progressPercent = 35;
+                        else if (path.current_session === 2) progressPercent = 60;
+                        else if (path.is_completed) progressPercent = 90;
+
+                        html += `
+                            <div class="callout callout-info">
+                                <h5>${path.text_title} - <small class="text-muted">${path.status_label}</small></h5>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-info" role="progressbar" style="width: ${progressPercent}%;" 
+                                         aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <p class="mb-1">
+                                    Estás siguiendo la ruta experimental. 
+                                    ${path.current_session === 0 ? 'Completa el Pre-Test.' : 'Sigue estudiando el material adaptativo.'}
+                                </p>
+                            </div>
+                        `;
+                    });
+                    $('#activePathsBody').html(html);
+                } else {
+                    $('#activePathsContainer').hide();
+                }
+            },
+            error: function(e) { console.log("No hay paths activos o error al cargar"); }
+        });
+    }
 
     // Función para cargar textos
     function loadTexts() {
@@ -275,8 +323,6 @@
             error: function(xhr) {
                 $('#textsLoading').hide();
                 toastr.error('Error al cargar textos');
-                
-                // Si token expiró, redirigir a login
                 if (xhr.status === 401) {
                     localStorage.clear();
                     window.location.href = '/login/';
@@ -285,42 +331,68 @@
         });
     }
 
-    // Función para renderizar textos
+    // Función para renderizar textos (MODIFICADA PARA EL FLUJO)
     function renderTexts(texts) {
         let html = '';
         
         texts.forEach(function(text) {
             const difficultyBadge = getDifficultyBadge(text.difficulty);
             
-            let attemptedBadge = '';
+            // Revisar si este texto tiene un Path activo
+            const activePath = activePathsCache[text.id];
+            
+            let statusHTML = '';
             let buttonsHTML = '';
             
-            if (text.has_been_attempted) {
-                attemptedBadge = '<span class="badge badge-success">✅ Completado</span>';
+            if (activePath) {
+                // --- MODO FLUJO EXPERIMENTAL ACTIVO ---
+                statusHTML = `<span class="badge badge-info">🔄 En Curso: Sesión ${activePath.current_session}</span>`;
                 
-                // Botones cuando YA completó el quiz
+                if (activePath.is_completed) {
+                    buttonsHTML = `
+                        <a href="/text/${text.id}/post-test/" class="btn btn-danger btn-block mb-2">
+                            <i class="fas fa-flag-checkered"></i> REALIZAR POST-TEST
+                        </a>
+                    `;
+                } else if (activePath.current_session === 0) {
+                    buttonsHTML = `
+                        <a href="/text/${text.id}/initial-quiz/" class="btn btn-primary btn-block mb-2">
+                            <i class="fas fa-play"></i> Continuar Diagnóstico
+                        </a>
+                    `;
+                } else {
+                    // Sesiones 1, 2, 3...
+                    buttonsHTML = `
+                        <a href="/materials/study/${text.id}/" class="btn btn-success btn-block mb-2">
+                            <i class="fas fa-brain"></i> Ir a Sesión ${activePath.current_session}
+                        </a>
+                    `;
+                }
+
+            } else if (text.has_been_attempted) {
+                // Completado antiguo o fuera de flujo
+                statusHTML = '<span class="badge badge-success">✅ Completado</span>';
                 buttonsHTML = `
                     <a href="/quiz/${text.id}/results/" class="btn btn-info btn-sm mb-2">
                         <i class="fas fa-eye"></i> Ver Resultados
                     </a>
                     <a href="/materials/history/${text.id}/" class="btn btn-warning btn-sm mb-2">
-                        <i class="fas fa-lightbulb"></i> Material Didáctico
+                        <i class="fas fa-lightbulb"></i> Historial
                     </a>
                 `;
             } else {
-                attemptedBadge = '<span class="badge badge-warning">📝 Pendiente</span>';
-                
-                // Botón cuando NO ha tomado el quiz
+                // Nuevo, nunca tocado
+                statusHTML = '<span class="badge badge-secondary">🆕 Nuevo</span>';
                 buttonsHTML = `
-                    <a href="/text/${text.id}/" class="btn btn-primary btn-block">
-                        <i class="fas fa-book-open"></i> Estudiar
+                    <a href="/text/${text.id}/initial-quiz/" class="btn btn-primary btn-block">
+                        <i class="fas fa-rocket"></i> Iniciar (Sesión 0)
                     </a>
                 `;
             }
             
             html += `
                 <div class="col-md-4 mb-3">
-                    <div class="card ${text.has_been_attempted ? 'border-success' : ''}">
+                    <div class="card ${activePath ? 'border-info' : ''}">
                         <div class="card-body">
                             <h5 class="card-title">${text.title}</h5>
                             <p class="card-text text-muted">${text.description || 'Sin descripción'}</p>
@@ -328,7 +400,7 @@
                             <div class="mb-2">
                                 <span class="badge badge-primary">${text.topic}</span>
                                 ${difficultyBadge}
-                                ${attemptedBadge}
+                                ${statusHTML}
                             </div>
                             
                             <div class="text-muted small mb-3">
@@ -367,13 +439,9 @@
                 'Authorization': 'Bearer ' + token
             },
             success: function(stats) {
-                // Actualizar info boxes
                 $('.info-box-number').eq(0).text(stats.texts_studied);
                 $('.info-box-number').eq(1).text(stats.total_attempts);
                 $('.info-box-number').eq(3).text(stats.study_streak + ' días');
-            },
-            error: function(xhr) {
-                console.log('Error al cargar estadísticas');
             }
         });
     }
@@ -381,25 +449,19 @@
     // Verificar si hay material pendiente
     function checkMaterialProcessing() {
         const pendingMaterial = localStorage.getItem('pending_material');
-        
         if (pendingMaterial) {
-            const data = JSON.parse(pendingMaterial);
             $('#materialProcessingAlert').fadeIn();
         } else {
             $('#materialProcessingAlert').fadeOut();
         }
     }
 
-    // Llamar al cargar
     checkMaterialProcessing();
-
-    // Actualizar cada 5 segundos
     setInterval(checkMaterialProcessing, 5000);
 
     // Logout
     $('#logoutBtn').on('click', function(e) {
         e.preventDefault();
-        
         const refresh_token = localStorage.getItem('refresh_token');
         
         $.ajax({
@@ -409,17 +471,10 @@
                 'Authorization': 'Bearer ' + localStorage.getItem('access_token')
             },
             contentType: 'application/json',
-            data: JSON.stringify({
-                refresh_token: refresh_token
-            }),
+            data: JSON.stringify({ refresh_token: refresh_token }),
             complete: function() {
-                // Limpiar localStorage
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('refresh_token');
-                localStorage.removeItem('user');
-                
+                localStorage.clear();
                 toastr.success('Sesión cerrada correctamente');
-                
                 setTimeout(function() {
                     window.location.href = '/login/';
                 }, 1000);
@@ -427,14 +482,10 @@
         });
     });
 
-    // ✅ Cargar notificaciones en el dropdown cuando se abre
+    // Cargar notificaciones
     $('#notificationDropdown').on('click', function(e) {
         e.preventDefault();
-        const html = loadNotifications();
-        $('#notificationMenu').html(html);
+        // Aquí iría la llamada real si existiera loadNotifications
     });
-
-    // ✅ Actualizar notificaciones cada vez que se muestra el dashboard
-    updateNotificationBadge();
 </script>
 {% endblock %}
