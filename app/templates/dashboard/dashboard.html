@@ -364,28 +364,52 @@ function renderTexts(texts) {
                 
                 // CASO 1: YA HIZO EL POST-TEST (TODO TERMINADO)
                 if (activePath.has_post_test) {
-                    const pre = activePath.pre_test_summary || { score: 0, weak_topics: [] };
+                    // Aseguramos que existan las listas para evitar errores de .join
+                    const pre = activePath.pre_test_summary || { score: 0, weak_topics: [], strong_topics: [] };
                     const post = activePath.post_test_summary || { score: 0, weak_topics: [], strong_topics: [] };
                     
+                    // Aseguramos arrays vacíos si vienen null
+                    const preWeak = pre.weak_topics || [];
+                    const preStrong = pre.strong_topics || [];
+                    const postWeak = post.weak_topics || [];
+                    const postStrong = post.strong_topics || [];
+
                     statusHTML = '<span class="badge badge-success">🏆 Finalizado</span>';
                     
-                    // Aquí construimos la lista simple que pediste
+                    // --- AQUÍ ESTÁ EL CAMBIO CLAVE CON MEJOR DISEÑO ---
                     buttonsHTML = `
-                        <div class="alert alert-light border p-2 mb-2" style="font-size: 0.85rem; line-height: 1.2;">
-                            <div class="d-flex justify-content-between border-bottom pb-1 mb-1">
-                                <span>Pre-Test: <b>${Math.round(pre.score)}%</b></span>
-                                <span>Post-Test: <b>${Math.round(post.score)}%</b></span>
-                            </div>
+                        <div class="p-2 mb-2 rounded-right" style="background-color: #f4f6f9; border-left: 4px solid #007bff; font-size: 0.85rem;">
+                            <h6 class="text-primary font-weight-bold mb-2" style="border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">
+                                <i class="fas fa-clipboard-list mr-1"></i> Pre-Test
+                                <span class="float-right badge badge-primary" style="font-size: 0.9em">${Math.round(pre.score)}%</span>
+                            </h6>
                             <div class="mb-1">
-                                <span class="text-danger">Débiles:</span> ${post.weak_topics.join(', ') || 'Ninguno'}
+                                <i class="fas fa-times-circle text-danger mr-1" style="font-size: 0.8rem;"></i>
+                                <strong>Débiles:</strong> <span class="text-muted">${preWeak.length ? preWeak.join(', ') : 'Ninguno'}</span>
                             </div>
                             <div>
-                                <span class="text-success">Fuertes:</span> ${post.strong_topics.join(', ') || 'Todos'}
+                                <i class="fas fa-check-circle text-success mr-1" style="font-size: 0.8rem;"></i>
+                                <strong>Fuertes:</strong> <span class="text-muted">${preStrong.length ? preStrong.join(', ') : 'Ninguno'}</span>
                             </div>
                         </div>
 
-                        <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
-                            <i class="fas fa-book"></i> Ver Mis Materiales
+                        <div class="p-2 mb-3 rounded-right" style="background-color: #e8f5e9; border-left: 4px solid #28a745; font-size: 0.85rem;">
+                            <h6 class="text-success font-weight-bold mb-2" style="border-bottom: 1px solid #c8e6c9; padding-bottom: 5px;">
+                                <i class="fas fa-flag-checkered mr-1"></i> Post-Test
+                                <span class="float-right badge badge-success" style="font-size: 0.9em">${Math.round(post.score)}%</span>
+                            </h6>
+                            <div class="mb-1">
+                                <i class="fas fa-times-circle text-danger mr-1" style="font-size: 0.8rem;"></i>
+                                <strong>Débiles:</strong> <span class="text-dark">${postWeak.length ? postWeak.join(', ') : 'Ninguno'}</span>
+                            </div>
+                            <div>
+                                <i class="fas fa-check-circle text-success mr-1" style="font-size: 0.8rem;"></i>
+                                <strong>Fuertes:</strong> <span class="text-dark">${postStrong.length ? postStrong.join(', ') : 'Ninguno'}</span>
+                            </div>
+                        </div>
+
+                        <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2 shadow-sm">
+                            <i class="fas fa-book mr-1"></i> Ver Mis Materiales
                         </a>
                     `;
 

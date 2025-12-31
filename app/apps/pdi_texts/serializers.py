@@ -247,7 +247,8 @@ class QuizAttemptSerializer(serializers.ModelSerializer):
             'weak_topics',
             'time_spent_seconds',
             'passed',
-            'created_at'
+            'created_at',
+            'answers_json'
         ]
     
     def get_text_title(self, obj):

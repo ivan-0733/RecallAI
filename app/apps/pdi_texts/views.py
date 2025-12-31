@@ -348,13 +348,14 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                     weak_topics.append(question['tema'])
 
             detailed_answers.append({
-                # ... datos detallados ...
                 'question_index': i,
+                'question_text': question.get('pregunta', f'Pregunta {i+1}'), # <--- NUEVO: Guarda el texto
                 'selected_answer': user_response,
                 'correct_answer': correct_option,
                 'is_correct': is_correct,
                 'topic': question.get('tema'),
-                'opciones': question.get('opciones', [])
+                'opciones': question.get('opciones', []),
+                'explanation': question.get('explicacion', 'Sin explicación disponible') # <--- NUEVO: Guarda explicación
             })
 
         final_score = (correct_count / len(questions_data)) * 100 if questions_data else 0
@@ -1368,7 +1369,7 @@ class UserActivePathsView(APIView):
                     has_pending_quiz = True
                     adaptive_quiz_id = pending_quiz.id
 
-            # --- NUEVA LÓGICA: Obtener datos de Pre y Post Test ---
+            # ... NUEVA LÓGICA: Obtener datos de Pre y Post Test ---
             def get_quiz_data(q_type):
                 attempt = QuizAttempt.objects.filter(
                     user=user, pdi_text=text, quiz_type=q_type
@@ -1377,18 +1378,34 @@ class UserActivePathsView(APIView):
                 if not attempt:
                     return None
                 
-                # Calcular temas fuertes (respuestas correctas)
+                # Usamos SETS para evitar duplicados (ej. si fallas 2 veces el mismo tema)
                 strong_topics = set()
+                weak_topics = set()
+                
+                # Recorremos el JSON detallado que corregimos antes
                 if attempt.answers_json:
                     for ans in attempt.answers_json:
-                        if ans.get('is_correct') and ans.get('topic'):
-                            strong_topics.add(ans['topic'])
+                        topic = ans.get('topic')
+                        if topic:
+                            if ans.get('is_correct'):
+                                strong_topics.add(topic)
+                            else:
+                                weak_topics.add(topic)
                 
+                # Fallback: Si es un intento viejo que no tenía json detallado
+                if not weak_topics and attempt.weak_topics:
+                    weak_topics = set(attempt.weak_topics)
+
+                # Retornamos listas completas para que el Dashboard muestre TODO
                 return {
                     'score': attempt.score,
-                    'weak_topics': attempt.weak_topics[:3], # Top 3 débiles
-                    'strong_topics': list(strong_topics)[:3] # Top 3 fuertes
+                    'weak_topics': list(weak_topics),
+                    'strong_topics': list(strong_topics)
                 }
+
+            # Llamada para ambos tipos de examen
+            pre_test_summary = get_quiz_data('initial')
+            post_test_summary = get_quiz_data('post_test')
 
             pre_test_summary = get_quiz_data('initial')
             post_test_summary = get_quiz_data('post_test')
