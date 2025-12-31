@@ -142,16 +142,20 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         # Reconstruir el resultado completo
         detailed_answers = last_attempt.answers_json
 
-        for answer_detail in detailed_answers:
-                if 'opciones' not in answer_detail:
-                    try:
-                        question_index = answer_detail['question_index']
-                        if 0 <= question_index < len(questions):
-                            original_question = questions[question_index]
-                            answer_detail['opciones'] = original_question.get('opciones', [])
-                    except (KeyError, IndexError, TypeError):
-                        # Si algo falla, solo añade una lista vacía
-                        answer_detail['opciones'] = []
+        # ✅ CORRECCIÓN ROBUSTA: Asegurar que cada respuesta tenga opciones
+        for idx, answer_detail in enumerate(detailed_answers):
+            if 'opciones' not in answer_detail or not answer_detail['opciones']:
+                try:
+                    # Intentar recuperar opciones usando el índice guardado o el índice del loop
+                    q_idx = answer_detail.get('question_index', idx)
+                    if 0 <= q_idx < len(questions):
+                        original_question = questions[q_idx]
+                        answer_detail['opciones'] = original_question.get('opciones', [])
+                        # También recuperar la pregunta si faltara
+                        if 'question' not in answer_detail:
+                            answer_detail['question'] = original_question.get('pregunta', '')
+                except (KeyError, IndexError, TypeError):
+                    answer_detail['opciones'] = []
         
         # Agrupar errores por tema
         from collections import Counter
@@ -197,7 +201,6 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         if quiz_type == 'initial':
             if not hasattr(text, 'initial_quiz'):
                 return Response({'error': 'No hay quiz inicial para este texto'}, status=404)
-            # El InitialQuiz tiene un método o estructura para obtener preguntas
             questions_data = text.initial_quiz.get_questions() 
         
         elif quiz_type == 'adaptive':
@@ -206,7 +209,6 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             
         # Validar que tengamos 20 preguntas (Regla de Oro)
         if len(questions_data) != 20:
-             # Nota: Podrías lanzar error, pero para robustez lo dejamos pasar con warning
              print(f"⚠️ ADVERTENCIA: El quiz tiene {len(questions_data)} preguntas, se esperaban 20.")
 
         # ---------------------------------------------------------
@@ -218,10 +220,13 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         weak_topics = []
         binary_results = [] # Para el CSV [1,0,1...]
 
-        # Iterar sobre las 20 preguntas
+        # Iterar sobre las preguntas
         for i, question in enumerate(questions_data):
             # Buscar la respuesta del usuario para este índice
-            user_ans_obj = next((a for a in answers if a.get('question_index') == i), None)
+            # El frontend manda 'question_index', aseguramos comparar enteros
+            user_ans_obj = next((a for a in answers if int(a.get('question_index', -1)) == i), None)
+            
+            # Obtener la opción seleccionada (A, B, C, D)
             user_response = user_ans_obj.get('selected_option') if user_ans_obj else None
             
             # Comparar (Asumiendo que 'respuesta_correcta' es 'A', 'B', etc.)
@@ -237,13 +242,17 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                 if 'tema' in question:
                     weak_topics.append(question['tema'])
 
+            # ✅ GUARDAR RESULTADO DETALLADO CON OPCIONES
             detailed_answers.append({
+                'question_index': i,
                 'question': question.get('pregunta'),
-                'user_answer': user_response,
+                'user_answer': user_response,      # Lo que respondió el usuario
+                'selected_answer': user_response,  # Alias para compatibilidad
                 'correct_answer': correct_option,
                 'is_correct': is_correct,
                 'explanation': question.get('explicacion'),
-                'topic': question.get('tema')
+                'topic': question.get('tema'),
+                'opciones': question.get('opciones', []) # Guardamos las opciones para reconstruir luego
             })
 
         # Calcular Score final (0 a 100)
@@ -256,7 +265,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             user=user,
             pdi_text=text,          # Modelo: pdi_text
             quiz_type=quiz_type,    # Modelo: quiz_type
-            score=final_score,      # Modelo: score (NO score_percent)
+            score=final_score,      # Modelo: score
             answers_json=detailed_answers, # Modelo: answers_json
             weak_topics=weak_topics, # Modelo: weak_topics
             time_spent_seconds=time_spent,
@@ -273,7 +282,6 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         # --- CASO A: PRE-TEST (INICIO DEL FLUJO) ---
         if quiz_type == 'initial':
             # 1. Crear el Learning Path con los 20 temas FIJOS
-            # Extraemos los temas en orden para congelarlos
             fixed_topics = [q.get('tema', f'Tema {idx+1}') for idx, q in enumerate(questions_data)]
             
             path, created = StudentLearningPath.objects.get_or_create(
@@ -289,15 +297,9 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             log_quiz_items(user.id, text.id, 'PRE_TEST', 0, final_score, binary_results)
             log_session_summary(user.id, text.id, 0, final_score, weak_topics)
             
-            # 3. TRIGGER: Generar Material Sesión 0
-            generate_didactic_material.delay(
-                user_id=user.id,
-                attempt_id=attempt.id,
-                material_type='flashcard' # Primer material siempre Flashcards
-            )
-            
-            next_action = 'wait_for_material'
-            message = 'Diagnóstico completado. Generando Plan de Estudio...'
+            # 3. CAMBIO: NO generar material automático. Enviar a resultados para que elija.
+            next_action = 'show_results'
+            message = 'Diagnóstico completado. Revisa tus resultados y selecciona tu material de estudio.'
 
         # --- CASO B: QUIZ ADAPTATIVO (DURANTE EL FLUJO) ---
         elif quiz_type == 'adaptive':
@@ -310,12 +312,11 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             log_session_summary(user.id, text.id, current_session, final_score, weak_topics)
             
             # 2. ACTUALIZAR SESIÓN
-            # El usuario acaba de terminar el quiz de la sesión X, ahora pasa a X+1
             path.current_session += 1
             path.save()
             
             # 3. DECIDIR SIGUIENTE PASO
-            MAX_SESSIONS = 3 # Configura esto según tu experimento
+            MAX_SESSIONS = 3 # ⚠️ Configura esto a 7 si deseas 7 sesiones
             
             if path.current_session >= MAX_SESSIONS:
                 # Fin del ciclo -> Ir a Post-Test
@@ -324,8 +325,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                 next_action = 'go_to_post_test'
                 message = 'Ciclo de estudio finalizado. Por favor realiza el Examen Final.'
             else:
-                # Continúa el ciclo -> Generar siguiente material
-                # Rotación simple de material: Flashcard -> Mapa Mental -> Flashcard...
+                # Continúa el ciclo -> Generar siguiente material (rotación o lógica por defecto)
                 next_material = 'mind_map' if path.current_session % 2 != 0 else 'flashcard'
                 
                 generate_didactic_material.delay(
@@ -341,7 +341,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             'score': final_score,
             'correct_count': correct_count,
             'weak_topics': weak_topics,
-            'next_action': next_action, # El frontend debe leer esto para saber si mostrar loading o redirigir
+            'next_action': next_action, # El frontend lee esto para redirigir
             'message': message
         })
     
@@ -468,7 +468,6 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                 material = material_request.generated_material
                 
                 if not material:
-                    # Esto no debería pasar si el estado es 'completado', pero por si acaso
                     return Response({
                         'status': 'failed', 
                         'error': 'El servidor completó la tarea pero no pudo enlazar el material.'
@@ -489,8 +488,6 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                 return Response({'status': 'processing'})
                 
         except MaterialRequest.DoesNotExist:
-            # Esto pasa si el frontend carga antes que la BD cree el registro
-            # El frontend lo interpretará como 'processing'
             return Response(
                 {'status': 'processing', 'detail': 'Request not found yet, still processing.'}, 
                 status=status.HTTP_404_NOT_FOUND
@@ -587,7 +584,6 @@ class UserDidacticMaterialViewSet(viewsets.ReadOnlyModelViewSet):
 
 # ========================================
 # VISTAS PARA TRACKING
-# Agregar a app/apps/pdi_texts/views.py
 # ========================================
 
 from rest_framework import status, viewsets
@@ -770,7 +766,6 @@ class TrackingViewSet(viewsets.ViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
     
     # URL Final: /api/tracking/session/end/
-# URL Final: /api/tracking/session/end/
     @action(detail=False, methods=['post'], url_path='end')
     def end_session(self, request):
         """

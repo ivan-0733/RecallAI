@@ -286,7 +286,7 @@
                                 </div>
                                 <p class="mb-1">
                                     Estás siguiendo la ruta experimental. 
-                                    ${path.current_session === 0 ? 'Completa el Pre-Test.' : 'Sigue estudiando el material adaptativo.'}
+                                    ${path.current_session === 0 ? 'Has completado el Pre-Test. Elige tu material.' : 'Sigue estudiando el material adaptativo.'}
                                 </p>
                             </div>
                         `;
@@ -355,9 +355,10 @@
                         </a>
                     `;
                 } else if (activePath.current_session === 0) {
+                    // CAMBIO AQUÍ: Si hay path en sesión 0, mandamos a RESULTADOS para elegir material
                     buttonsHTML = `
-                        <a href="/text/${text.id}/initial-quiz/" class="btn btn-primary btn-block mb-2">
-                            <i class="fas fa-play"></i> Continuar Diagnóstico
+                        <a href="/quiz/${text.id}/results/" class="btn btn-primary btn-block mb-2">
+                            <i class="fas fa-chart-bar"></i> Ver Resultados y Elegir Material
                         </a>
                     `;
                 } else {

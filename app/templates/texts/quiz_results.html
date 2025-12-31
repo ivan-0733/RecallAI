@@ -5,7 +5,6 @@
 {% block body_class %}sidebar-mini layout-fixed{% endblock %}
 
 {% block content %}
-<!-- Navbar -->
 <nav class="main-header navbar navbar-expand navbar-white navbar-light">
     <ul class="navbar-nav">
         <li class="nav-item d-none d-sm-inline-block">
@@ -16,13 +15,11 @@
     </ul>
 </nav>
 
-<!-- Content Wrapper -->
 <div class="content-wrapper" style="margin-left: 0;">
     <section class="content mt-5">
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-md-10">
-                    <!-- Resultado general -->
                     <div class="card" id="resultCard">
                         <div class="card-body text-center p-5">
                             <div id="resultIcon" class="mb-3"></div>
@@ -62,7 +59,6 @@
                         </div>
                     </div>
 
-                    <!-- Temas débiles -->
                     <div id="weakTopicsCard" class="card" style="display: none;">
                         <div class="card-header bg-warning">
                             <h3 class="card-title">
@@ -81,7 +77,6 @@
                         </div>
                     </div>
 
-                    <!-- Respuestas detalladas -->
                     <div class="card">
                         <div class="card-header">
                             <h3 class="card-title">
@@ -92,15 +87,14 @@
                         <div class="card-body" id="detailedAnswers"></div>
                     </div>
 
-                    <!-- Acciones -->
                     <div class="card">
                         <div class="card-body text-center">
                             <a href="/dashboard/" class="btn btn-primary btn-lg">
                                 <i class="fas fa-home"></i> Ir al Dashboard
                             </a>
-                            <a href="#" id="goToMaterialBtn" class="btn btn-warning btn-lg ml-2">
+                            <button onclick="showMaterialSelector()" id="goToMaterialBtn" class="btn btn-warning btn-lg ml-2">
                                 <i class="fas fa-lightbulb"></i> Generar Material Didáctico
-                            </a>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -122,7 +116,7 @@
         const pathParts = window.location.pathname.split('/');
         textId = pathParts[2];
 
-        $('#goToMaterialBtn').attr('href', `/materials/history/${textId}/`);
+        // Se eliminó la línea que sobrescribía el href del botón
         
         const resultStr = localStorage.getItem('quiz_result');
         
@@ -257,29 +251,26 @@
             $('#weakTopicsList').html(topicsHtml);
         }
         
-        // ✅ MODIFICADO: Respuestas detalladas con opciones
+        // Mostrar respuestas detalladas con opciones
         let detailedHtml = '';
         result.detailed_answers.forEach(function(answer, index) {
             const cardClass = answer.is_correct ? 'border-success' : 'border-danger';
             const iconClass = answer.is_correct ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
 
-            // --- INICIO: Lógica para opciones ---
             let optionsHtml = '<ul class="list-group list-group-flush">';
             if (answer.opciones && Array.isArray(answer.opciones)) {
                 answer.opciones.forEach(function(opcion) {
-                    const optionLetter = opcion.substring(0, 1); // "A", "B", "C", "D"
+                    const optionLetter = opcion.substring(0, 1);
                     
                     let liClass = 'list-group-item';
                     let icon = '';
-                    let optionText = opcion; // Texto por defecto
+                    let optionText = opcion;
 
                     if (optionLetter === answer.correct_answer) {
-                        // Es la respuesta correcta (siempre verde)
                         optionText = `<strong class="text-success">${opcion}</strong>`;
                         icon = ' <i class="fas fa-check-circle text-success ml-2"></i>';
                     
                     } else if (optionLetter === answer.selected_answer && !answer.is_correct) {
-                        // Es la respuesta incorrecta que seleccionó (rojo)
                         optionText = `<strong class="text-danger">${opcion}</strong>`;
                         icon = ' <i class="fas fa-times-circle text-danger ml-2"></i>';
                     }
@@ -288,7 +279,6 @@
                 });
             }
             optionsHtml += '</ul>';
-            // --- FIN: Lógica para opciones ---
 
             detailedHtml += `
                 <div class="card mb-3 ${cardClass}">
@@ -321,7 +311,6 @@
         $('#detailedAnswers').html(detailedHtml);
     }
 
-    // NUEVA FUNCIÓN: Mostrar modal de selección de material
     function showMaterialSelector(result) {
         const token = localStorage.getItem('access_token');
         
@@ -356,7 +345,6 @@
                     <div class="modal-body">
         `;
         
-        // Si hay recomendación, mostrar banner
         if (recommendation.has_recommendation) {
             const materialNames = {
                 'flashcard': 'Flashcards',
@@ -375,7 +363,6 @@
             `;
         }
         
-        // Opciones de material
         const materials = [
             {
                 type: 'flashcard',
@@ -447,7 +434,6 @@
         $('body').append(modalHTML);
         $('#materialSelectorModal').modal('show');
         
-        // Event listener para seleccionar material
         $('.material-option-card').on('click', function() {
             const selectedType = $(this).data('type');
             const wasRecommended = recommendation.has_recommendation;
@@ -460,15 +446,12 @@
     function generateMaterial(materialType, wasRecommended, followedRecommendation) {
         const token = localStorage.getItem('access_token');
         
-        // Cerrar modal
         $('#materialSelectorModal').modal('hide');
         
-        // Mostrar loading
         toastr.info('Generando material... Esto puede tomar 1-2 minutos', '', {
             timeOut: 5000
         });
         
-        // Llamar a API
         $.ajax({
             url: '/api/texts/generate-material/',
             type: 'POST',
@@ -487,7 +470,6 @@
                     timeOut: 3000
                 });
                 
-                // Polling para verificar si ya está generado (cada 5 segundos)
                 const pollInterval = setInterval(function() {
                     checkMaterialStatus(materialType, pollInterval);
                 }, 5000);
@@ -509,7 +491,6 @@
                 'Authorization': 'Bearer ' + token
             },
             success: function(materials) {
-                // Buscar el material más reciente del tipo solicitado
                 const latestMaterial = materials.find(m => 
                     m.material_type === materialType && 
                     m.text === parseInt(textId) &&
@@ -520,7 +501,6 @@
                     clearInterval(pollInterval);
                     toastr.success('¡Material listo! Redirigiendo...', '', {timeOut: 2000});
                     
-                    // Redirigir al visor de material
                     setTimeout(function() {
                         window.location.href = `/material/${latestMaterial.id}/`;
                     }, 2000);
