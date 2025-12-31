@@ -112,6 +112,7 @@
     let currentScore;
     let flowStatus = null;
     let selectedMaterialType = null;
+    let lastQuizType = null;
 
     $(document).ready(function() {
         const pathParts = window.location.pathname.split('/');
@@ -206,13 +207,14 @@
     }
 
     function renderActionButtons() {
+        // Ocultar spinner inmediatamente
         $('#actionButtonsLoading').hide();
         const container = $('#actionButtonsContainer');
         container.empty();
         
         let buttonsHTML = '';
         
-        // Dashboard siempre
+        // Botón Dashboard siempre visible
         buttonsHTML += `
             <a href="/dashboard/" class="btn btn-secondary btn-lg mr-2">
                 <i class="fas fa-home"></i> Ir al Dashboard
@@ -226,21 +228,34 @@
                 </a>
             `;
         } else if (flowStatus.is_completed) {
-            buttonsHTML += `
-                <a href="/text/${textId}/post-test/" class="btn btn-danger btn-lg">
-                    <i class="fas fa-flag-checkered"></i> Realizar Post-Test
-                </a>
-            `;
+            // --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
+            // Si el curso está completo Y el último quiz fue el post_test
+            if (lastQuizType === 'post_test') {
+                // Mostrar mensaje de éxito final
+                buttonsHTML += `
+                    <div class="alert alert-success d-inline-block text-left" style="vertical-align: middle; margin-bottom: 0;">
+                        <i class="fas fa-graduation-cap fa-2x float-left mr-3"></i>
+                        <strong>¡Curso Finalizado!</strong><br>
+                        Has completado exitosamente este texto.
+                    </div>
+                `;
+            } else {
+                // Si el curso está completo pero acabas de terminar las sesiones (adaptive), toca el Post-Test
+                buttonsHTML += `
+                    <a href="/text/${textId}/post-test/" class="btn btn-danger btn-lg">
+                        <i class="fas fa-flag-checkered"></i> Realizar Post-Test
+                    </a>
+                `;
+            }
+            // ---------------------------------
         } else if (flowStatus.current_session === 0) {
             if (flowStatus.has_material) {
-                // Ya tiene material - mostrar botón para ver lista de materiales
                 buttonsHTML += `
                     <a href="/materials/history/${textId}/" class="btn btn-success btn-lg">
                         <i class="fas fa-book"></i> Ver Mis Materiales
                     </a>
                 `;
             } else {
-                // No tiene material - mostrar selector
                 buttonsHTML += `
                     <button onclick="showMaterialSelector()" class="btn btn-warning btn-lg">
                         <i class="fas fa-lightbulb"></i> Elegir Material de Estudio
@@ -250,14 +265,12 @@
         } else {
             const sessionLabel = flowStatus.current_session + 1;
             
-            // Siempre mostrar acceso a materiales
             buttonsHTML += `
                 <a href="/materials/history/${textId}/" class="btn btn-success btn-lg">
                     <i class="fas fa-book"></i> Ver Mis Materiales
                 </a>
             `;
             
-            // Si hay quiz pendiente, mostrar botón
             if (flowStatus.has_pending_quiz) {
                 buttonsHTML += `
                     <a href="/quiz/${textId}/adaptive/${flowStatus.adaptive_quiz_id}/" class="btn btn-info btn-lg ml-2">
@@ -266,9 +279,7 @@
                 `;
             }
             
-            // Si necesita generar nuevo material (último quiz más reciente que último material)
             if (flowStatus.needs_new_material) {
-                // Guardar el attempt_id del último quiz para usarlo al generar material
                 window.lastAttemptIdForMaterial = flowStatus.last_attempt_id;
                 buttonsHTML += `
                     <button onclick="showMaterialSelectorForAdaptive()" class="btn btn-warning btn-lg ml-2">
@@ -300,6 +311,9 @@
         const passed = result.passed;
         const score = result.score;
         attemptId = result.attempt.id;
+
+        lastQuizType = result.attempt.quiz_type;
+
         currentScore = score;
         
         let resultHTML = `

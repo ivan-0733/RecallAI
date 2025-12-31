@@ -242,6 +242,7 @@ class QuizAttemptSerializer(serializers.ModelSerializer):
             'id',
             'text_title',
             'attempt_number',
+            'quiz_type',      # <--- AGREGAR ESTO
             'score',
             'weak_topics',
             'time_spent_seconds',
