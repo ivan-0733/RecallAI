@@ -306,7 +306,6 @@
         `);
         container.show();
     }
-
     function displayResults(result) {
         const passed = result.passed;
         const score = result.score;
@@ -359,81 +358,103 @@
         
         $('#resultCard').html(resultHTML);
         
-        // Temas débiles
-        if (result.weak_topics && result.weak_topics.length > 0) {
+        // --- CORRECCIÓN: Calcular estadísticas por tema localmente ---
+        const topicStats = {};
+        
+        // 1. Calcular conteos basados en las respuestas detalladas
+        if (result.detailed_answers && Array.isArray(result.detailed_answers)) {
+            result.detailed_answers.forEach(ans => {
+                const topicName = ans.topic || 'General';
+                if (!topicStats[topicName]) {
+                    topicStats[topicName] = { total: 0, incorrect: 0 };
+                }
+                topicStats[topicName].total++;
+                if (!ans.is_correct) {
+                    topicStats[topicName].incorrect++;
+                }
+            });
+        }
+
+        // 2. Filtrar solo los temas con errores para mostrarlos como "débiles"
+        const topicsWithErrors = Object.keys(topicStats).filter(t => topicStats[t].incorrect > 0);
+
+        if (topicsWithErrors.length > 0) {
             $('#weakTopicsCard').show();
-            
             let topicsHtml = '<ul class="list-group">';
-            result.weak_topics.forEach(function(topic) {
-                const errorCount = result.topic_errors[topic] || 0;
+            
+            topicsWithErrors.forEach(topic => {
+                const stat = topicStats[topic];
                 topicsHtml += `
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         ${topic}
-                        <span class="badge badge-danger badge-pill">${errorCount} error(es)</span>
+                        <span class="badge badge-danger badge-pill">${stat.incorrect} error(es) de ${stat.total}</span>
                     </li>
                 `;
             });
             topicsHtml += '</ul>';
-            
             $('#weakTopicsList').html(topicsHtml);
+        } else {
+             $('#weakTopicsCard').hide();
         }
         
         // Mostrar respuestas detalladas con opciones
         let detailedHtml = '';
-        result.detailed_answers.forEach(function(answer, index) {
-            const cardClass = answer.is_correct ? 'border-success' : 'border-danger';
-            const iconClass = answer.is_correct ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+        if (result.detailed_answers) {
+            result.detailed_answers.forEach(function(answer, index) {
+                const cardClass = answer.is_correct ? 'border-success' : 'border-danger';
+                const iconClass = answer.is_correct ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
 
-            let optionsHtml = '<ul class="list-group list-group-flush">';
-            if (answer.opciones && Array.isArray(answer.opciones)) {
-                answer.opciones.forEach(function(opcion) {
-                    const optionLetter = opcion.substring(0, 1);
-                    
-                    let liClass = 'list-group-item';
-                    let icon = '';
-                    let optionText = opcion;
-
-                    if (optionLetter === answer.correct_answer) {
-                        optionText = `<strong class="text-success">${opcion}</strong>`;
-                        icon = ' <i class="fas fa-check-circle text-success ml-2"></i>';
-                    
-                    } else if (optionLetter === answer.selected_answer && !answer.is_correct) {
-                        optionText = `<strong class="text-danger">${opcion}</strong>`;
-                        icon = ' <i class="fas fa-times-circle text-danger ml-2"></i>';
-                    }
-
-                    optionsHtml += `<li class="${liClass}">${optionText}${icon}</li>`;
-                });
-            }
-            optionsHtml += '</ul>';
-
-            detailedHtml += `
-                <div class="card mb-3 ${cardClass}">
-                    <div class="card-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="fas ${iconClass}"></i>
-                                Pregunta ${index + 1}
-                            </h5>
-                            <span class="badge badge-info">${answer.topic}</span>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>${answer.question}</strong></p>
+                let optionsHtml = '<ul class="list-group list-group-flush">';
+                if (answer.opciones && Array.isArray(answer.opciones)) {
+                    answer.opciones.forEach(function(opcion) {
+                        const optionLetter = opcion.substring(0, 1);
                         
-                        <div class="mb-3">
-                            ${optionsHtml}
-                        </div>
+                        let liClass = 'list-group-item';
+                        let icon = '';
+                        let optionText = opcion;
 
-                        ${!answer.is_correct ? `
-                            <div class="alert alert-info mt-3">
-                                <strong>Explicación:</strong> ${answer.explanation}
+                        if (optionLetter === answer.correct_answer) {
+                            optionText = `<strong class="text-success">${opcion}</strong>`;
+                            icon = ' <i class="fas fa-check-circle text-success ml-2"></i>';
+                        
+                        } else if (optionLetter === answer.selected_answer && !answer.is_correct) {
+                            optionText = `<strong class="text-danger">${opcion}</strong>`;
+                            icon = ' <i class="fas fa-times-circle text-danger ml-2"></i>';
+                        }
+
+                        optionsHtml += `<li class="${liClass}">${optionText}${icon}</li>`;
+                    });
+                }
+                optionsHtml += '</ul>';
+
+                detailedHtml += `
+                    <div class="card mb-3 ${cardClass}">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas ${iconClass}"></i>
+                                    Pregunta ${index + 1}
+                                </h5>
+                                <span class="badge badge-info">${answer.topic}</span>
                             </div>
-                        ` : ''}
+                        </div>
+                        <div class="card-body">
+                            <p><strong>${answer.question}</strong></p>
+                            
+                            <div class="mb-3">
+                                ${optionsHtml}
+                            </div>
+
+                            ${!answer.is_correct ? `
+                                <div class="alert alert-info mt-3">
+                                    <strong>Explicación:</strong> ${answer.explanation}
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
-                </div>
-            `;
-        });
+                `;
+            });
+        }
         
         $('#detailedAnswers').html(detailedHtml);
     }
@@ -456,6 +477,14 @@
                 renderMaterialModal({has_recommendation: false});
             }
         });
+    }
+
+// Función auxiliar fuera del flujo principal
+function getRandomRecommendationType() {
+        const random = Math.random() * 100;
+        if (random < 65) return 'flashcard';      // 65% probabilidad
+        if (random < 90) return 'summary';        // 25% probabilidad
+        return 'decision_tree';                   // 10% probabilidad
     }
 
     function renderMaterialModal(recommendation) {
@@ -489,101 +518,88 @@
                 </div>
             `;
         }
-        
-    // Función para obtener recomendación aleatoria con probabilidades
-    function getRandomRecommendation() {
-        const random = Math.random() * 100; // Número entre 0 y 100
-        
-        if (random < 65) {
-            return 'flashcard';      // 65% probabilidad
-        } else if (random < 90) {
-            return 'summary';        // 25% probabilidad (65 + 25 = 90)
-        } else {
-            return 'decision_tree';  // 10% probabilidad (90 + 10 = 100)
-        }
-    }
 
-    // Obtener la recomendación aleatoria
-    const randomRecommendedType = getRandomRecommendation();
+        // Obtener la recomendación aleatoria usando la función auxiliar
+        const randomRecommendedType = getRandomRecommendationType();
 
-    const materials = [
-        {
-            type: 'flashcard',
-            icon: '📇',
-            title: 'Flashcards Interactivas',
-            description: 'Tarjetas con preguntas/respuestas que puedes voltear'
-        },
-        {
-            type: 'decision_tree',
-            icon: '🌳',
-            title: 'Árbol de Decisión',
-            description: 'Flujo interactivo para elegir técnicas según el problema'
-        },
-        {
-            type: 'summary',
-            icon: '📄',
-            title: 'Resumen Estructurado',
-            description: 'Documento condensado con énfasis en tus temas débiles'
-        },
-        {
-            type: 'recommendation',
-            actualType: randomRecommendedType, // El tipo real que se generará
-            icon: '⭐',
-            title: 'Recomendación',
-            description: 'Déjanos elegir el mejor material para ti basado en efectividad'
-        }
-    ];
-        
+        const materials = [
+            {
+                type: 'flashcard',
+                icon: '📇',
+                title: 'Flashcards Interactivas',
+                description: 'Tarjetas con preguntas/respuestas que puedes voltear'
+            },
+            {
+                type: 'decision_tree',
+                icon: '🌳',
+                title: 'Árbol de Decisión',
+                description: 'Flujo interactivo para elegir técnicas según el problema'
+            },
+            {
+                type: 'summary',
+                icon: '📄',
+                title: 'Resumen Estructurado',
+                description: 'Documento condensado con énfasis en tus temas débiles'
+            },
+            {
+                type: 'recommendation',
+                actualType: randomRecommendedType, // El tipo real que se generará
+                icon: '⭐',
+                title: 'Recomendación',
+                description: 'Déjanos elegir el mejor material para ti basado en efectividad'
+            }
+        ];
+            
         modalHTML += '<div class="row">';
         
-            materials.forEach(function(material) {
-                const isRecommendationCard = material.type === 'recommendation';
-                const isRecommended = recommendation.has_recommendation && recommendation.recommended_type === material.type;
-                const cardClass = isRecommendationCard ? 'border-warning shadow-lg bg-light' : (isRecommended ? 'border-success shadow-lg' : 'border-secondary');
-                const effectiveness = recommendation.all_effectiveness ? recommendation.all_effectiveness[material.type] : 0;
-                
-                // CRÍTICO: Para la tarjeta de recomendación, usar actualType como data-type
-                const dataType = isRecommendationCard ? material.actualType : material.type;
-                
-                // Mostrar qué tipo se seleccionó para la recomendación
-                let recommendationBadge = '';
-                if (isRecommendationCard) {
-                    const typeNames = {
-                        'flashcard': '📇 Flashcards',
-                        'decision_tree': '🌳 Árbol de Decisión',
-                        'summary': '📄 Resumen'
-                    };
-                    recommendationBadge = `<span class="badge badge-warning mb-2">🎲 ${typeNames[material.actualType]}</span>`;
-                }
-                
-                modalHTML += `
-                    <div class="col-md-6 mb-3">
-                        <div class="card ${cardClass} h-100 material-option-card" data-type="${dataType}" data-is-recommendation="${isRecommendationCard}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                            <div class="card-body text-center">
-                                ${isRecommendationCard ? recommendationBadge : (isRecommended ? '<span class="badge badge-success mb-2">⭐ Recomendado</span>' : '')}
-                                <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
-                                <h5 class="card-title">${material.title}</h5>
-                                <p class="card-text text-muted">${material.description}</p>
-                                ${isRecommendationCard ? `
-                                    <div class="mt-2">
-                                        <small class="text-info">
-                                            <i class="fas fa-magic"></i> Selección inteligente basada en efectividad
-                                        </small>
-                                    </div>
-                                ` : (recommendation.has_recommendation ? `
-                                    <div class="mt-2">
-                                        <small class="text-muted">Tu mejora promedio: 
-                                            <strong class="${effectiveness > 0 ? 'text-success' : 'text-secondary'}">
-                                                ${effectiveness > 0 ? '+' + effectiveness + '%' : 'Sin datos'}
-                                            </strong>
-                                        </small>
-                                    </div>
-                                ` : '')}
-                            </div>
+        materials.forEach(function(material) {
+            const isRecommendationCard = material.type === 'recommendation';
+            const isRecommended = recommendation.has_recommendation && recommendation.recommended_type === material.type;
+            const cardClass = isRecommendationCard ? 'border-warning shadow-lg bg-light' : (isRecommended ? 'border-success shadow-lg' : 'border-secondary');
+            const effectiveness = recommendation.all_effectiveness ? recommendation.all_effectiveness[material.type] : 0;
+            
+            // CRÍTICO: Para la tarjeta de recomendación, usar actualType como data-type
+            const dataType = isRecommendationCard ? material.actualType : material.type;
+            
+            // Mostrar qué tipo se seleccionó para la recomendación
+            let recommendationBadge = '';
+            if (isRecommendationCard) {
+                const typeNames = {
+                    'flashcard': '📇 Flashcards',
+                    'decision_tree': '🌳 Árbol de Decisión',
+                    'summary': '📄 Resumen'
+                };
+                recommendationBadge = `<span class="badge badge-warning mb-2">🎲 ${typeNames[material.actualType]}</span>`;
+            }
+            
+            modalHTML += `
+                <div class="col-md-6 mb-3">
+                    <div class="card ${cardClass} h-100 material-option-card" data-type="${dataType}" data-is-recommendation="${isRecommendationCard}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div class="card-body text-center">
+                            ${isRecommendationCard ? recommendationBadge : (isRecommended ? '<span class="badge badge-success mb-2">⭐ Recomendado</span>' : '')}
+                            <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
+                            <h5 class="card-title">${material.title}</h5>
+                            <p class="card-text text-muted">${material.description}</p>
+                            ${isRecommendationCard ? `
+                                <div class="mt-2">
+                                    <small class="text-info">
+                                        <i class="fas fa-magic"></i> Selección inteligente basada en efectividad
+                                    </small>
+                                </div>
+                            ` : (recommendation.has_recommendation ? `
+                                <div class="mt-2">
+                                    <small class="text-muted">Tu mejora promedio: 
+                                        <strong class="${effectiveness > 0 ? 'text-success' : 'text-secondary'}">
+                                            ${effectiveness > 0 ? '+' + effectiveness + '%' : 'Sin datos'}
+                                        </strong>
+                                    </small>
+                                </div>
+                            ` : '')}
                         </div>
                     </div>
-                `;
-            });
+                </div>
+            `;
+        });
         
         modalHTML += `
                     </div>
