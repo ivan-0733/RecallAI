@@ -437,7 +437,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             path.save()
             
             # 3. DECIDIR SIGUIENTE PASO
-            MAX_SESSIONS = 3 # ⚠️ Configura esto a 7 si deseas 7 sesiones
+            MAX_SESSIONS = 2  # Total de sesiones: 0, 1, 2, 3, 4, 5, 6 = 7 sesiones
             
             if path.current_session >= MAX_SESSIONS:
                 # Fin del ciclo -> Ir a Post-Test
@@ -446,16 +446,10 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                 next_action = 'go_to_post_test'
                 message = 'Ciclo de estudio finalizado. Por favor realiza el Examen Final.'
             else:
-                # Continúa el ciclo -> Generar siguiente material (rotación o lógica por defecto)
-                next_material = 'mind_map' if path.current_session % 2 != 0 else 'flashcard'
-                
-                generate_didactic_material.delay(
-                    user_id=user.id,
-                    attempt_id=attempt.id,
-                    material_type=next_material
-                )
-                next_action = 'wait_for_material'
-                message = f'Sesión {current_session} finalizada. Generando material para Sesión {path.current_session}...'
+                # Continúa el ciclo -> El usuario debe generar material MANUALMENTE desde "Mis Materiales"
+                # NO generamos material automáticamente para evitar duplicados
+                next_action = 'show_results'
+                message = f'Sesión {current_session} finalizada. Ve a "Mis Materiales" para generar tu siguiente material de estudio.' 
 
         topic_counter = Counter(weak_topics)
 
@@ -1172,6 +1166,210 @@ class AnalyticsViewSet(viewsets.ViewSet):
                 'error': 'Material no encontrado'
             }, status=status.HTTP_404_NOT_FOUND)
         
+# ========================================
+# NUEVO ENDPOINT: Generar Material + Quiz Adaptativo
+# ========================================
+
+class GenerateMaterialAndQuizView(APIView):
+    """
+    Genera Material Didáctico Y Quiz Adaptativo de forma síncrona.
+    Espera a que ambos estén listos antes de retornar.
+    POST /api/texts/generate-material-and-quiz/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        import time
+        from apps.pdi_texts.tasks import generate_adaptive_quiz_task
+        
+        user = request.user
+        material_type = request.data.get('material_type')
+        attempt_id = request.data.get('attempt_id')
+        was_recommended = request.data.get('was_recommended', False)
+        followed_recommendation = request.data.get('followed_recommendation', False)
+        
+        if not material_type or not attempt_id:
+            return Response(
+                {'error': 'material_type y attempt_id son requeridos'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            attempt = QuizAttempt.objects.get(id=attempt_id, user=user)
+            text = attempt.pdi_text
+            
+            # Obtener o crear el Learning Path
+            path = StudentLearningPath.objects.filter(user=user, text=text).first()
+            if not path:
+                return Response(
+                    {'error': 'No existe un Learning Path para este texto'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Registrar solicitud de material
+            MaterialRequest.objects.create(
+                user=user,
+                text=text,
+                attempt=attempt,
+                material_type=material_type,
+                was_recommended=was_recommended,
+                followed_recommendation=followed_recommendation
+            )
+            
+            # PASO 1: Generar Material Didáctico (SÍNCRONO - sin .delay())
+            print(f"🎯 PASO 1: Generando material {material_type}...")
+            material_result = generate_didactic_material(
+                user_id=user.id,
+                attempt_id=attempt_id,
+                material_type=material_type
+            )
+            
+            # Obtener el material recién creado
+            material = UserDidacticMaterial.objects.filter(
+                user=user,
+                text=text
+            ).order_by('-generated_at').first() 
+            
+            if not material:
+                return Response(
+                    {'error': 'Error al generar el material'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            print(f"✅ Material generado: ID {material.id}")
+            
+            # PASO 2: Esperar 2 minutos antes de generar el quiz (delay para API)
+            print(f"⏳ PASO 2: Esperando 120 segundos antes de generar quiz...")
+            time.sleep(120)  # 2 minutos de delay
+            
+            # PASO 3: Generar Quiz Adaptativo (SÍNCRONO - sin .delay())
+            print(f"🎯 PASO 3: Generando Quiz Adaptativo...")
+            quiz_result = generate_adaptive_quiz_task(
+                learning_path_id=path.id,
+                material_id=material.id
+            )
+            
+            print(f"✅ Quiz generado exitosamente")
+            
+            return Response({
+                'status': 'success',
+                'material_id': material.id,
+                'material_type': material_type,
+                'quiz_generated': True,
+                'message': 'Material y Quiz generados exitosamente'
+            })
+            
+        except QuizAttempt.DoesNotExist:
+            return Response(
+                {'error': 'Intento de quiz no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            import traceback
+            print(f"❌ Error: {str(e)}")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error al generar: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+class MaterialsHistoryAPIView(APIView):
+    """
+    Devuelve el historial de materiales del usuario con estado activo/inactivo
+    y si necesita generar nuevo material.
+    GET /api/texts/{text_id}/materials-history/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, text_id):
+        user = request.user
+        
+        try:
+            text = PDIText.objects.get(id=text_id)
+        except PDIText.DoesNotExist:
+            return Response({'error': 'Texto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Obtener el Learning Path para saber si está completado
+        path = StudentLearningPath.objects.filter(user=user, text=text).first()
+        path_is_completed = path.is_completed if path else False
+        current_session = path.current_session if path else 0
+        
+        # Obtener todos los materiales del usuario para este texto
+        materials = UserDidacticMaterial.objects.filter(
+            user=user,
+            text=text
+        ).order_by('-generated_at')
+        
+        # Obtener el último quiz adaptativo contestado
+        last_adaptive_attempt = QuizAttempt.objects.filter(
+            user=user,
+            pdi_text=text,
+            quiz_type='adaptive'
+        ).order_by('-created_at').first()
+        
+        # Obtener el último material generado
+        last_material = materials.first()
+        
+        # Determinar si necesita generar nuevo material
+        # (hay quiz contestado más reciente que el último material)
+        # PERO si el path está completado, NO necesita nuevo material
+        needs_new_material = False
+        last_attempt_id = None
+        last_attempt_data = None
+        
+        if not path_is_completed and last_adaptive_attempt:
+            last_attempt_id = last_adaptive_attempt.id
+            if last_material:
+                needs_new_material = last_adaptive_attempt.created_at > last_material.generated_at
+            else:
+                needs_new_material = True
+            
+            # Si necesita nuevo material, incluir datos del último quiz
+            if needs_new_material:
+                last_attempt_data = {
+                    'id': last_adaptive_attempt.id,
+                    'score': last_adaptive_attempt.score,
+                    'weak_topics': last_adaptive_attempt.weak_topics,
+                    'created_at': last_adaptive_attempt.created_at,
+                    'answers_json': last_adaptive_attempt.answers_json,
+                    'time_spent_seconds': last_adaptive_attempt.time_spent_seconds
+                }
+        
+        # Construir lista de materiales con estado
+        materials_data = []
+        for idx, material in enumerate(materials):
+            # Si el path está completado, TODOS los materiales están inactivos
+            # Si no está completado, solo el más reciente puede estar activo
+            is_active = False
+            
+            if not path_is_completed and idx == 0:  # Es el material más reciente
+                if last_adaptive_attempt:
+                    # Activo si el material fue generado DESPUÉS del último quiz
+                    is_active = material.generated_at > last_adaptive_attempt.created_at
+                else:
+                    # Si no hay quiz adaptativo, el primer material siempre está activo
+                    is_active = True
+            
+            materials_data.append({
+                'id': material.id,
+                'material_type': material.material_type,
+                'generated_at': material.generated_at,
+                'weak_topics': material.weak_topics,
+                'total_flashcards': material.total_flashcards,
+                'total_nodes': material.total_nodes,
+                'is_active': is_active
+            })
+        
+        return Response({
+            'materials': materials_data,
+            'needs_new_material': needs_new_material,
+            'last_attempt_id': last_attempt_id,
+            'last_attempt_data': last_attempt_data,
+            'total_materials': len(materials_data),
+            'path_is_completed': path_is_completed,  # ← NUEVO CAMPO
+            'current_session': current_session  # ← NUEVO CAMPO
+        })
+        
 class UserActivePathsView(APIView):
     """
     Vista para el Dashboard: Devuelve los Learning Paths activos del usuario
@@ -1191,6 +1389,12 @@ class UserActivePathsView(APIView):
             # Estado base
             status_label = f"Sesión {path.current_session}"
             
+            # ✅ NUEVO: Verificar si ya tiene material generado
+            has_material = UserDidacticMaterial.objects.filter(
+                user=request.user,
+                text=path.text
+            ).exists()
+            
             # Buscar si hay un quiz adaptativo pendiente para este path
             pending_quiz = AdaptiveQuiz.objects.filter(
                 learning_path=path,
@@ -1205,6 +1409,7 @@ class UserActivePathsView(APIView):
                 # Buscamos un intento creado DESPUÉS de que se generó el quiz
                 already_taken = QuizAttempt.objects.filter(
                     user=request.user,
+                    pdi_text=path.text,
                     quiz_type='adaptive',
                     created_at__gte=pending_quiz.created_at
                 ).exists()
@@ -1220,6 +1425,7 @@ class UserActivePathsView(APIView):
                 'current_session': path.current_session,
                 'is_completed': path.is_completed,
                 'status_label': status_label,
+                'has_material': has_material,  # ✅ NUEVO CAMPO
                 'has_pending_quiz': has_pending_quiz,
                 'adaptive_quiz_id': adaptive_quiz_id,
                 'started_at': path.created_at

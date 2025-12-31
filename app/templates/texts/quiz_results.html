@@ -476,62 +476,100 @@
             `;
         }
         
-        const materials = [
-            {
-                type: 'flashcard',
-                icon: '📇',
-                title: 'Flashcards Interactivas',
-                description: 'Tarjetas con preguntas/respuestas que puedes voltear'
-            },
-            {
-                type: 'decision_tree',
-                icon: '🌳',
-                title: 'Árbol de Decisión',
-                description: 'Flujo interactivo para elegir técnicas según el problema'
-            },
-            {
-                type: 'mind_map',
-                icon: '🗺️',
-                title: 'Mapa Mental',
-                description: 'Diagrama jerárquico colapsable de conceptos'
-            },
-            {
-                type: 'summary',
-                icon: '📄',
-                title: 'Resumen Estructurado',
-                description: 'Documento condensado con énfasis en tus temas débiles'
-            }
-        ];
+    // Función para obtener recomendación aleatoria con probabilidades
+    function getRandomRecommendation() {
+        const random = Math.random() * 100; // Número entre 0 y 100
+        
+        if (random < 65) {
+            return 'flashcard';      // 65% probabilidad
+        } else if (random < 90) {
+            return 'summary';        // 25% probabilidad (65 + 25 = 90)
+        } else {
+            return 'decision_tree';  // 10% probabilidad (90 + 10 = 100)
+        }
+    }
+
+    // Obtener la recomendación aleatoria
+    const randomRecommendedType = getRandomRecommendation();
+
+    const materials = [
+        {
+            type: 'flashcard',
+            icon: '📇',
+            title: 'Flashcards Interactivas',
+            description: 'Tarjetas con preguntas/respuestas que puedes voltear'
+        },
+        {
+            type: 'decision_tree',
+            icon: '🌳',
+            title: 'Árbol de Decisión',
+            description: 'Flujo interactivo para elegir técnicas según el problema'
+        },
+        {
+            type: 'summary',
+            icon: '📄',
+            title: 'Resumen Estructurado',
+            description: 'Documento condensado con énfasis en tus temas débiles'
+        },
+        {
+            type: 'recommendation',
+            actualType: randomRecommendedType, // El tipo real que se generará
+            icon: '⭐',
+            title: 'Recomendación',
+            description: 'Déjanos elegir el mejor material para ti basado en efectividad'
+        }
+    ];
         
         modalHTML += '<div class="row">';
         
-        materials.forEach(function(material) {
-            const isRecommended = recommendation.has_recommendation && recommendation.recommended_type === material.type;
-            const cardClass = isRecommended ? 'border-success shadow-lg' : 'border-secondary';
-            const effectiveness = recommendation.all_effectiveness ? recommendation.all_effectiveness[material.type] : 0;
-            
-            modalHTML += `
-                <div class="col-md-6 mb-3">
-                    <div class="card ${cardClass} h-100 material-option-card" data-type="${material.type}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                        <div class="card-body text-center">
-                            ${isRecommended ? '<span class="badge badge-success mb-2">⭐ Recomendado</span>' : ''}
-                            <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
-                            <h5 class="card-title">${material.title}</h5>
-                            <p class="card-text text-muted">${material.description}</p>
-                            ${recommendation.has_recommendation ? `
-                                <div class="mt-2">
-                                    <small class="text-muted">Tu mejora promedio: 
-                                        <strong class="${effectiveness > 0 ? 'text-success' : 'text-secondary'}">
-                                            ${effectiveness > 0 ? '+' + effectiveness + '%' : 'Sin datos'}
-                                        </strong>
-                                    </small>
-                                </div>
-                            ` : ''}
+            materials.forEach(function(material) {
+                const isRecommendationCard = material.type === 'recommendation';
+                const isRecommended = recommendation.has_recommendation && recommendation.recommended_type === material.type;
+                const cardClass = isRecommendationCard ? 'border-warning shadow-lg bg-light' : (isRecommended ? 'border-success shadow-lg' : 'border-secondary');
+                const effectiveness = recommendation.all_effectiveness ? recommendation.all_effectiveness[material.type] : 0;
+                
+                // CRÍTICO: Para la tarjeta de recomendación, usar actualType como data-type
+                const dataType = isRecommendationCard ? material.actualType : material.type;
+                
+                // Mostrar qué tipo se seleccionó para la recomendación
+                let recommendationBadge = '';
+                if (isRecommendationCard) {
+                    const typeNames = {
+                        'flashcard': '📇 Flashcards',
+                        'decision_tree': '🌳 Árbol de Decisión',
+                        'summary': '📄 Resumen'
+                    };
+                    recommendationBadge = `<span class="badge badge-warning mb-2">🎲 ${typeNames[material.actualType]}</span>`;
+                }
+                
+                modalHTML += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card ${cardClass} h-100 material-option-card" data-type="${dataType}" data-is-recommendation="${isRecommendationCard}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                            <div class="card-body text-center">
+                                ${isRecommendationCard ? recommendationBadge : (isRecommended ? '<span class="badge badge-success mb-2">⭐ Recomendado</span>' : '')}
+                                <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
+                                <h5 class="card-title">${material.title}</h5>
+                                <p class="card-text text-muted">${material.description}</p>
+                                ${isRecommendationCard ? `
+                                    <div class="mt-2">
+                                        <small class="text-info">
+                                            <i class="fas fa-magic"></i> Selección inteligente basada en efectividad
+                                        </small>
+                                    </div>
+                                ` : (recommendation.has_recommendation ? `
+                                    <div class="mt-2">
+                                        <small class="text-muted">Tu mejora promedio: 
+                                            <strong class="${effectiveness > 0 ? 'text-success' : 'text-secondary'}">
+                                                ${effectiveness > 0 ? '+' + effectiveness + '%' : 'Sin datos'}
+                                            </strong>
+                                        </small>
+                                    </div>
+                                ` : '')}
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
-        });
+                `;
+            });
         
         modalHTML += `
                     </div>
@@ -560,7 +598,6 @@
         const materialNames = {
             'flashcard': 'Flashcards Interactivas',
             'decision_tree': 'Árbol de Decisión',
-            'mind_map': 'Mapa Mental',
             'summary': 'Resumen Estructurado'
         };
         
@@ -572,13 +609,16 @@
                         <div class="spinner-border text-primary mb-4" style="width: 4rem; height: 4rem;" role="status">
                             <span class="sr-only">Generando...</span>
                         </div>
-                        <h4 class="mb-3">Generando ${materialNames[materialType] || 'Material'}</h4>
-                        <p class="text-muted mb-2">Esto puede tomar 1-2 minutos...</p>
-                        <p class="text-muted small">Por favor no cierres esta ventana</p>
+                        <h4 class="mb-3" id="loadingTitle">Generando ${materialNames[materialType] || 'Material'}...</h4>
+                        <p class="text-muted mb-2" id="loadingSubtitle">Paso 1 de 2: Creando tu material personalizado</p>
+                        <p class="text-muted small">Esto puede tomar 3-5 minutos. Por favor no cierres esta ventana.</p>
                         <div class="progress mt-4" style="height: 8px;">
                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                                 role="progressbar" style="width: 100%"></div>
+                                role="progressbar" style="width: 50%" id="loadingProgress"></div>
                         </div>
+                        <p class="text-muted small mt-3" id="loadingDetail">
+                            <i class="fas fa-info-circle"></i> Preparando material didáctico y quiz de evaluación...
+                        </p>
                     </div>
                 </div>
             </div>
@@ -589,6 +629,29 @@
         $('#loadingModal').remove();
         $('body').append(loadingHTML);
         $('#loadingModal').modal('show');
+        
+        // Actualizar mensajes durante la espera
+        setTimeout(() => {
+            $('#loadingSubtitle').text('Paso 1 de 2: Generando material con IA...');
+            $('#loadingProgress').css('width', '30%');
+        }, 5000);
+        
+        setTimeout(() => {
+            $('#loadingSubtitle').text('Paso 1 de 2: Procesando contenido personalizado...');
+            $('#loadingProgress').css('width', '50%');
+        }, 30000);
+        
+        setTimeout(() => {
+            $('#loadingTitle').text('Preparando Quiz Adaptativo...');
+            $('#loadingSubtitle').text('Paso 2 de 2: Generando preguntas de evaluación...');
+            $('#loadingProgress').css('width', '70%');
+            $('#loadingDetail').text('El quiz se generará automáticamente para evaluar tu aprendizaje.');
+        }, 120000); // 2 minutos (delay entre material y quiz)
+        
+        setTimeout(() => {
+            $('#loadingSubtitle').text('Paso 2 de 2: Finalizando...');
+            $('#loadingProgress').css('width', '90%');
+        }, 180000);
     }
 
     function hideLoadingModal() {
@@ -604,15 +667,16 @@
         setTimeout(() => {
             $('#materialSelectorModal').remove();
             showLoadingModal(materialType);
-        }, 5000);
+        }, 500);
         
         $.ajax({
-            url: '/api/texts/generate-material/',
+            url: '/api/texts/generate-material-and-quiz/',  // NUEVO ENDPOINT
             type: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + token,
                 'Content-Type': 'application/json'
             },
+            timeout: 300000, // 5 minutos de timeout para esperar ambos
             data: JSON.stringify({
                 material_type: materialType,
                 attempt_id: attemptId,
@@ -620,17 +684,19 @@
                 followed_recommendation: followedRecommendation
             }),
             success: function(response) {
-                toastr.success('¡Material encolado! Te redirigiremos cuando esté listo...', '', {
-                    timeOut: 3000
-                });
+                hideLoadingModal();
+                toastr.success('¡Material y Quiz listos! Redirigiendo...');
                 
-                const pollInterval = setInterval(function() {
-                    checkMaterialStatus(materialType, pollInterval);
-                }, 5000);
+                // Redirigir directamente al material (el quiz ya está listo)
+                if (response.material_id) {
+                    window.location.href = `/material/${response.material_id}/`;
+                } else {
+                    window.location.href = `/materials/history/${textId}/`;
+                }
             },
             error: function(xhr) {
                 hideLoadingModal();
-                toastr.error('Error al generar material: ' + (xhr.responseJSON?.error || 'Error desconocido'));
+                toastr.error('Error al generar: ' + (xhr.responseJSON?.error || 'Error desconocido'));
             }
         });
     }

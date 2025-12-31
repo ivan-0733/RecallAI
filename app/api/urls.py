@@ -23,7 +23,9 @@ from apps.pdi_texts.views import (
     UserDidacticMaterialViewSet,
     TrackingViewSet,
     AnalyticsViewSet,
-    UserActivePathsView 
+    UserActivePathsView,
+    GenerateMaterialAndQuizView,
+    MaterialsHistoryAPIView 
 )
 
 app_name = 'api'
@@ -55,6 +57,12 @@ urlpatterns = [
 
     # === RUTAS DEL FLUJO DE APRENDIZAJE ===
     path('user/paths/', UserActivePathsView.as_view(), name='user-paths'),
+
+    # === NUEVA RUTA: Generar Material + Quiz ===
+    path('texts/generate-material-and-quiz/', GenerateMaterialAndQuizView.as_view(), name='generate-material-and-quiz'),
+
+    # === NUEVA RUTA: Historial de materiales con estado ===
+    path('texts/<int:text_id>/materials-history/', MaterialsHistoryAPIView.as_view(), name='materials-history-api'),
     
     # Router de ViewSets (SIEMPRE AL FINAL)
     path('', include(router.urls)),

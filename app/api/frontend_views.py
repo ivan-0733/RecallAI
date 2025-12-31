@@ -76,3 +76,7 @@ def study_next_material_view(request, text_id):
     else:
         # Caso raro: Path existe pero material no se ha generado aun
         return redirect('frontend:dashboard')
+    
+class AdaptiveQuizInterfaceView(TemplateView):
+    """Vista para tomar quiz adaptativo"""
+    template_name = 'texts/quiz_interface.html'

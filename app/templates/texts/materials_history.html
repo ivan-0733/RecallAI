@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Material Didáctico{% endblock %}
+{% block title %}Mis Materiales{% endblock %}
 
 {% block body_class %}sidebar-mini layout-fixed{% endblock %}
 
@@ -16,138 +16,161 @@
 </nav>
 
 <div class="content-wrapper" style="margin-left: 0;">
-    <section class="content mt-5">
+    <section class="content mt-4">
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-md-10">
                     <div class="card">
-                        <div class="card-header bg-primary">
+                        <div class="card-header bg-primary text-white">
                             <h3 class="card-title">
-                                <i class="fas fa-lightbulb"></i>
-                                Material Didáctico para: <span id="textTitle">Cargando...</span>
+                                <i class="fas fa-book mr-2"></i>
+                                Mis Materiales de Estudio
                             </h3>
                         </div>
-                    </div>
-
-                    <div id="loadingMaterials" class="text-center">
-                        <i class="fas fa-spinner fa-spin fa-3x"></i>
-                        <p class="mt-3">Cargando historial de materiales...</p>
-                    </div>
-
-                    <div id="noMaterialsCard" style="display: none;">
-                        <div class="card">
-                            <div class="card-body text-center p-5">
-                                <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
-                                <h4>No has generado material didáctico aún</h4>
-                                <p class="text-muted">Selecciona el tipo de material que quieres generar para estudiar tus temas débiles</p>
+                        <div class="card-body">
+                            <div id="materialsLoading" class="text-center py-5">
+                                <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
+                                <p>Cargando materiales...</p>
                             </div>
-                        </div>
-
-                        <div class="card" id="materialSelectorCard">
-                            <div class="card-header bg-warning">
-                                <h4 class="card-title mb-0">
-                                    <i class="fas fa-tasks"></i>
-                                    ¿Qué tipo de material quieres generar?
-                                </h4>
+                            
+                            <div id="noMaterials" class="alert alert-info" style="display: none;">
+                                <i class="fas fa-info-circle mr-2"></i>
+                                <strong>No tienes materiales generados aún.</strong>
+                                <p class="mb-0 mt-2">Toma el cuestionario inicial para generar tu primer material personalizado.</p>
                             </div>
-                            <div class="card-body">
-                                <div id="recommendationBanner"></div>
-                                <div class="row" id="materialOptions"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="generatingMaterialCard" style="display: none;">
-                        <div class="card">
-                            <div class="card-body text-center p-5">
-                                <i class="fas fa-magic fa-spin fa-4x text-primary mb-3"></i>
-                                <h4>Generando tu material...</h4>
-                                <p class="text-muted">Esto puede tardar uno o dos minutos. Por favor, no cierres esta página.</p>
+                            
+                            <div id="materialsList" style="display: none;"></div>
+                            
+                            <!-- Sección de resultados y generar nuevo material -->
+                            <div id="newMaterialSection" style="display: none;">
+                                <hr class="my-4">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-chart-bar mr-2"></i>
+                                            Resultados de tu último quiz - ¡Genera nuevo material!
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="lastQuizResults"></div>
+                                        <div class="text-center mt-4">
+                                            <button onclick="showMaterialSelector()" class="btn btn-warning btn-lg">
+                                                <i class="fas fa-lightbulb mr-2"></i>
+                                                Generar Nuevo Material de Estudio
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    <div id="materialsListCard" style="display: none;">
-                        <div class="card">
-                            <div class="card-header bg-success">
-                                <h4 class="card-title mb-0">
-                                    <i class="fas fa-history"></i>
-                                    Historial de Material Generado
-                                </h4>
-                            </div>
-                            <div class="card-body">
-                                <div id="materialsList"></div>
-                            </div>
-                        </div>
+                    
+                    <div class="text-center mt-3">
+                        <a href="/dashboard/" class="btn btn-secondary">
+                            <i class="fas fa-home mr-2"></i> Volver al Dashboard
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 </div>
+
+<!-- Modal de selección de material -->
+<div class="modal fade" id="materialSelectorModal" tabindex="-1" role="dialog" data-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-lightbulb"></i>
+                    ¿Qué tipo de material quieres usar para estudiar?
+                </h5>
+            </div>
+            <div class="modal-body" id="materialSelectorBody">
+            </div>
+            <div class="modal-footer">
+                <p class="text-muted mr-auto"><i class="fas fa-info-circle"></i> Selecciona el tipo que prefieras</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de carga -->
+<div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-body text-center p-5">
+                <div class="spinner-border text-primary mb-4" style="width: 4rem; height: 4rem;" role="status">
+                    <span class="sr-only">Generando...</span>
+                </div>
+                <h4 class="mb-3" id="loadingTitle">Generando Material...</h4>
+                <p class="text-muted mb-2" id="loadingSubtitle">Paso 1 de 2: Creando tu material personalizado</p>
+                <p class="text-muted small">Esto puede tomar 3-5 minutos. Por favor no cierres esta ventana.</p>
+                <div class="progress mt-4" style="height: 8px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                        role="progressbar" style="width: 10%" id="loadingProgress"></div>
+                </div>
+                <p class="text-muted small mt-3" id="loadingDetail">
+                    <i class="fas fa-info-circle"></i> Preparando material didáctico y quiz de evaluación...
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     let textId;
-    let textTitle;
-    let lastAttemptId;
-    let currentScore;
+    let attemptId;
+    let materialsData = null;
 
     $(document).ready(function() {
         const pathParts = window.location.pathname.split('/');
-        textId = pathParts[3];
-
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            window.location.href = '/login/';
-            return;
-        }
-
+        textId = pathParts[3]; // /materials/history/{text_id}/
+        
         loadMaterialsHistory();
     });
 
     function loadMaterialsHistory() {
         const token = localStorage.getItem('access_token');
-
-        // Cargar información del texto
+        
         $.ajax({
-            url: `/api/texts/${textId}/`,
+            url: `/api/texts/${textId}/materials-history/`,
             type: 'GET',
-            headers: {
-                'Authorization': 'Bearer ' + token
-            },
-            success: function(text) {
-                textTitle = text.title;
-                $('#textTitle').text(textTitle);
-            }
-        });
-
-        // Cargar materiales del usuario para este texto
-        $.ajax({
-            url: '/api/texts/my-materials/',
-            type: 'GET',
-            headers: {
-                'Authorization': 'Bearer ' + token
-            },
-            success: function(materials) {
-                // Filtrar materiales de ESTE texto
-                const textMaterials = materials.filter(m => m.text === parseInt(textId));
-
-                $('#loadingMaterials').hide();
-
-                if (textMaterials.length === 0) {
-                    // No hay materiales - Mostrar selector
-                    showMaterialSelector();
+            headers: { 'Authorization': 'Bearer ' + token },
+            success: function(response) {
+                materialsData = response;
+                $('#materialsLoading').hide();
+                
+                if (response.materials.length === 0) {
+                    $('#noMaterials').show();
                 } else {
-                    // Hay materiales - Mostrar historial
-                    showMaterialsList(textMaterials);
+                    renderMaterialsList(response.materials);
+                    $('#materialsList').show();
+                }
+                
+                // Mostrar sección de nuevo material si es necesario
+                // PERO NO si el path está completado (ya agotó las sesiones)
+                if (response.needs_new_material && response.last_attempt_data && !response.path_is_completed) {
+                    attemptId = response.last_attempt_id;
+                    renderLastQuizResults(response.last_attempt_data);
+                    $('#newMaterialSection').show();
+                }
+
+                // Si el path está completado, mostrar mensaje informativo
+                if (response.path_is_completed) {
+                    $('#materialsList').after(`
+                        <div class="alert alert-success mt-4">
+                            <h5><i class="fas fa-check-circle"></i> ¡Ruta de aprendizaje completada!</h5>
+                            <p class="mb-0">Has completado las 7 sesiones de estudio. Ahora puedes realizar el <strong>Post-Test</strong> desde el Dashboard para evaluar tu aprendizaje final.</p>
+                        </div>
+                    `);
                 }
             },
             error: function(xhr) {
-                $('#loadingMaterials').hide();
+                $('#materialsLoading').hide();
                 toastr.error('Error al cargar materiales');
-
                 if (xhr.status === 401) {
                     localStorage.clear();
                     window.location.href = '/login/';
@@ -156,244 +179,10 @@
         });
     }
 
-    function showMaterialSelector() {
-        $('#noMaterialsCard').show();
-
-        // Obtener último intento
-        const token = localStorage.getItem('access_token');
-
-        $.ajax({
-            url: `/api/texts/${textId}/last-attempt/`,
-            type: 'GET',
-            headers: {
-                'Authorization': 'Bearer ' + token
-            },
-            success: function(result) {
-                lastAttemptId = result.attempt.id;
-                currentScore = result.score;
-
-                // Obtener recomendación
-                $.ajax({
-                    url: `/api/texts/${textId}/recommendation/?attempt_id=${lastAttemptId}`,
-                    type: 'GET',
-                    headers: {
-                        'Authorization': 'Bearer ' + token
-                    },
-                    success: function(recommendation) {
-                        renderMaterialSelector(recommendation);
-                    },
-                    error: function() {
-                        renderMaterialSelector({has_recommendation: false});
-                    }
-                });
-            },
-            error: function() {
-                toastr.error('No se encontró un intento previo');
-                setTimeout(() => window.location.href = '/dashboard/', 2000);
-            }
-        });
-    }
-
-    function renderMaterialSelector(recommendation) {
-        // Banner de recomendación
-        if (recommendation.has_recommendation) {
-            const materialNames = {
-                'flashcard': 'Flashcards',
-                'decision_tree': 'Mapa Conceptual',
-                'mind_map': 'Mapa Mental',
-                'summary': 'Resumen Estructurado'
-            };
-
-            $('#recommendationBanner').html(`
-                <div class="alert alert-success" role="alert">
-                    <h5 class="alert-heading">
-                        <i class="fas fa-star"></i> Recomendado para ti: <strong>${materialNames[recommendation.recommended_type]}</strong>
-                    </h5>
-                    <p class="mb-0">${recommendation.message}</p>
-                </div>
-            `);
-        }
-
-        // Opciones de material
-        const materials = [
-            {
-                type: 'flashcard',
-                icon: '📇',
-                title: 'Flashcards Interactivas',
-                description: 'Tarjetas con preguntas/respuestas que puedes voltear'
-            },
-            {
-                type: 'decision_tree',
-                icon: '💠',
-                title: 'Mapa Conceptual',
-                description: 'Flujo interactivo para elegir técnicas según el problema'
-            },
-            /*
-            {
-                type: 'mind_map',
-                icon: '🗺️',
-                title: 'Mapa Mental',
-                description: 'Diagrama jerárquico colapsable de conceptos'
-            },
-            */
-            {
-                type: 'summary',
-                icon: '📄',
-                title: 'Resumen Estructurado',
-                description: 'Documento condensado con énfasis en tus temas débiles'
-            }
-        ];
-
-        let optionsHTML = '';
-
-        materials.forEach(function(material) {
-            const isRecommended = recommendation.has_recommendation && recommendation.recommended_type === material.type;
-            const cardClass = isRecommended ? 'border-success shadow-lg' : 'border-secondary';
-            const effectiveness = recommendation.all_effectiveness ? recommendation.all_effectiveness[material.type] : 0;
-
-            optionsHTML += `
-                <div class="col-md-6 mb-3">
-                    <div class="card ${cardClass} h-100 material-option-card" data-type="${material.type}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                        <div class="card-body text-center">
-                            ${isRecommended ? '<span class="badge badge-success mb-2">⭐ Recomendado</span>' : ''}
-                            <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
-                            <h5 class="card-title">${material.title}</h5>
-                            <p class="card-text text-muted">${material.description}</p>
-                            ${recommendation.has_recommendation ? `
-                                <div class="mt-2">
-                                    <small class="text-muted">Tu mejora promedio: 
-                                        <strong class="${effectiveness > 0 ? 'text-success' : 'text-secondary'}">
-                                            ${effectiveness > 0 ? '+' + effectiveness + '%' : 'Sin datos'}
-                                        </strong>
-                                    </small>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-
-        $('#materialOptions').html(optionsHTML);
-
-        // Event listeners
-        $('.material-option-card').on('click', function() {
-            const selectedType = $(this).data('type');
-            const wasRecommended = recommendation.has_recommendation;
-            const followedRecommendation = recommendation.has_recommendation && selectedType === recommendation.recommended_type;
-
-            generateMaterial(selectedType, wasRecommended, followedRecommendation);
-        });
-    }
-
-    function generateMaterial(materialType, wasRecommended, followedRecommendation) {
-        const token = localStorage.getItem('access_token');
-
-        // ✅ 1. Ocultar selector y mostrar spinner de "generando"
-        $('#noMaterialsCard').hide();
-        $('#generatingMaterialCard').show();
-        
-        toastr.info('Generando material en segundo plano...', '', {
-            timeOut: 4000
-        });
-
-        // ✅ 2. Llamar a API
-        $.ajax({
-            url: '/api/texts/generate-material/',
-            type: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + token,
-                'Content-Type': 'application/json'
-            },
-            data: JSON.stringify({
-                material_type: materialType,
-                attempt_id: lastAttemptId,
-                was_recommended: wasRecommended,
-                followed_recommendation: followedRecommendation
-            }),
-            success: function(response) {
-                // ✅ 3. Iniciar el "polling" (preguntar repetidamente)
-                toastr.success('¡Solicitud recibida! Estamos generando tu material...');
-                
-                // Empezamos a revisar si ya está listo
-                pollForMaterials(); 
-            },
-            error: function(xhr) {
-                // Si falla, ocultamos el spinner y mostramos el selector otra vez
-                $('#generatingMaterialCard').hide();
-                $('#noMaterialsCard').show();
-                toastr.error('Error al iniciar la generación: ' + (xhr.responseJSON?.error || 'Error desconocido'));
-            }
-        });
-    }
-
-    function pollForMaterials() {
-        const token = localStorage.getItem('access_token');
-
-        // Llamamos a la API que lista los materiales
-        $.ajax({
-            url: '/api/texts/my-materials/',
-            type: 'GET',
-            cache: false,
-            headers: {
-                'Authorization': 'Bearer ' + token
-            },
-            success: function(materials) {
-                // Filtramos materiales de ESTE texto
-                const textMaterials = materials.filter(m => m.text === parseInt(textId));
-
-                if (textMaterials.length > 0) {
-                    // ✅ ¡ENCONTRADO! Ocultamos el spinner y mostramos la lista
-                    $('#generatingMaterialCard').hide();
-                    showMaterialsList(textMaterials);
-                    toastr.success('¡Tu material está listo!');
-                } else {
-                    // Aún no está listo, volvemos a preguntar en 5 segundos
-                    setTimeout(pollForMaterials, 5000); // 5000ms = 5 segundos
-                }
-            },
-            error: function() {
-                // Si hay un error, dejamos de preguntar
-                $('#generatingMaterialCard').hide();
-                $('#noMaterialsCard').show();
-                toastr.error('Error al verificar el estado del material.');
-            }
-        });
-    }
-
-    function addNotification(material) {
-        // Guardar notificación en localStorage
-        let notifications = JSON.parse(localStorage.getItem('notifications') || '[]');
-        
+    function renderMaterialsList(materials) {
         const materialNames = {
-            'flashcard': 'Flashcards',
-            'decision_tree': 'Mapa Conceptual',
-            'mind_map': 'Mapa Mental',
-            'summary': 'Resumen Estructurado'
-        };
-        
-        notifications.unshift({
-            id: material.id,
-            text_id: textId,
-            text_title: textTitle,
-            material_type: material.material_type,
-            material_name: materialNames[material.material_type],
-            timestamp: new Date().toISOString(),
-            read: false
-        });
-        
-        // Mantener solo últimas 20 notificaciones
-        notifications = notifications.slice(0, 20);
-        
-        localStorage.setItem('notifications', JSON.stringify(notifications));
-    }
-
-    function showMaterialsList(materials) {
-        $('#materialsListCard').show();
-
-        const materialNames = {
-            'flashcard': 'Flashcards',
-            'decision_tree': 'Mapa Conceptual',
+            'flashcard': 'Flashcards Interactivas',
+            'decision_tree': 'Árbol de Decisión',
             'mind_map': 'Mapa Mental',
             'summary': 'Resumen Estructurado'
         };
@@ -407,7 +196,7 @@
 
         let listHTML = '';
 
-        materials.forEach(function(material) {
+        materials.forEach(function(material, index) {
             const date = new Date(material.generated_at).toLocaleString('es-MX', {
                 year: 'numeric',
                 month: 'long',
@@ -416,22 +205,34 @@
                 minute: '2-digit'
             });
 
-            const weakTopicsHTML = material.weak_topics.map(topic =>
-                `<span class="badge badge-warning">${topic}</span>`
-            ).join(' ');
+            const weakTopicsHTML = material.weak_topics && material.weak_topics.length > 0 
+                ? material.weak_topics.map(topic => `<span class="badge badge-warning">${topic}</span>`).join(' ')
+                : '<span class="text-muted">Sin temas específicos</span>';
+
+            // Determinar si el botón está activo o desactivado
+            const isActive = material.is_active;
+            const buttonClass = isActive ? 'btn-primary' : 'btn-secondary disabled';
+            const buttonText = isActive ? '<i class="fas fa-eye"></i> Ver Material' : '<i class="fas fa-lock"></i> Completado';
+            const cardClass = isActive ? '' : 'bg-light';
+            const statusBadge = isActive 
+                ? '<span class="badge badge-success"><i class="fas fa-star"></i> Activo</span>' 
+                : '<span class="badge badge-secondary"><i class="fas fa-check"></i> Estudiado</span>';
 
             listHTML += `
-                <div class="card mb-3">
+                <div class="card mb-3 ${cardClass}">
                     <div class="card-body">
                         <div class="row align-items-center">
                             <div class="col-md-2 text-center">
-                                <i class="fas ${materialIcons[material.material_type]} fa-3x text-primary"></i>
+                                <i class="fas ${materialIcons[material.material_type]} fa-3x ${isActive ? 'text-primary' : 'text-muted'}"></i>
                             </div>
                             <div class="col-md-7">
-                                <h5 class="mb-1">
-                                    <i class="fas ${materialIcons[material.material_type]}"></i>
-                                    ${materialNames[material.material_type]}
-                                </h5>
+                                <div class="d-flex align-items-center mb-2">
+                                    <h5 class="mb-0 mr-2">
+                                        <i class="fas ${materialIcons[material.material_type]}"></i>
+                                        ${materialNames[material.material_type]}
+                                    </h5>
+                                    ${statusBadge}
+                                </div>
                                 <p class="text-muted mb-2">
                                     <i class="far fa-clock"></i> Generado: ${date}
                                 </p>
@@ -439,16 +240,14 @@
                                     <strong>Temas enfocados:</strong><br>
                                     ${weakTopicsHTML}
                                 </p>
-                                ${material.generation_time_seconds ? `
-                                    <small class="text-muted">
-                                        <i class="fas fa-bolt"></i> Tiempo de generación: ${material.generation_time_seconds}s
-                                    </small>
-                                ` : ''}
                             </div>
                             <div class="col-md-3 text-center">
-                                <a href="/material/${material.id}/" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-eye"></i> Ver Material
+                                <a href="${isActive ? '/material/' + material.id + '/' : '#'}" 
+                                   class="btn ${buttonClass} btn-lg"
+                                   ${!isActive ? 'onclick="return false;" style="pointer-events: auto; cursor: not-allowed;"' : ''}>
+                                    ${buttonText}
                                 </a>
+                                ${!isActive ? '<p class="text-muted small mt-2"><i class="fas fa-info-circle"></i> Ya evaluaste este material</p>' : ''}
                             </div>
                         </div>
                     </div>
@@ -457,6 +256,170 @@
         });
 
         $('#materialsList').html(listHTML);
+    }
+
+    function renderLastQuizResults(attemptData) {
+        const score = attemptData.score;
+        const passed = score >= 80;
+        const weakTopics = attemptData.weak_topics || [];
+        const date = new Date(attemptData.created_at).toLocaleString('es-MX');
+        
+        let resultsHTML = `
+            <div class="row">
+                <div class="col-md-4 text-center">
+                    <div class="display-4 ${passed ? 'text-success' : 'text-danger'}">${score.toFixed(1)}%</div>
+                    <p class="text-muted">Puntaje obtenido</p>
+                </div>
+                <div class="col-md-8">
+                    <p><strong><i class="far fa-calendar"></i> Fecha:</strong> ${date}</p>
+                    <p><strong><i class="fas fa-exclamation-triangle text-warning"></i> Temas a reforzar:</strong></p>
+                    <div class="mb-3">
+                        ${weakTopics.length > 0 
+                            ? weakTopics.map(t => `<span class="badge badge-warning mr-1 mb-1">${t}</span>`).join('') 
+                            : '<span class="text-success">¡Sin temas débiles!</span>'}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('#lastQuizResults').html(resultsHTML);
+    }
+
+    function showMaterialSelector() {
+        // Función para obtener recomendación aleatoria con probabilidades
+        function getRandomRecommendation() {
+            const random = Math.random() * 100;
+            if (random < 80) return 'flashcard';
+            else if (random < 90) return 'summary';
+            else return 'decision_tree';
+        }
+
+        const randomRecommendedType = getRandomRecommendation();
+
+        const materials = [
+            { type: 'flashcard', icon: '📇', title: 'Flashcards Interactivas', description: 'Tarjetas con preguntas/respuestas que puedes voltear' },
+            { type: 'decision_tree', icon: '🌳', title: 'Árbol de Decisión', description: 'Flujo interactivo para elegir técnicas según el problema' },
+            { type: 'summary', icon: '📄', title: 'Resumen Estructurado', description: 'Documento condensado con énfasis en tus temas débiles' },
+            { type: 'recommendation', actualType: randomRecommendedType, icon: '⭐', title: 'Recomendación', description: 'Déjanos elegir el mejor material para ti basado en efectividad' }
+        ];
+
+        let modalHTML = '<div class="row">';
+        
+        materials.forEach(function(material) {
+            const isRecommendationCard = material.type === 'recommendation';
+            const cardClass = isRecommendationCard ? 'border-warning shadow-lg bg-light' : 'border-secondary';
+            const dataType = isRecommendationCard ? material.actualType : material.type;
+            
+            let recommendationBadge = '';
+            if (isRecommendationCard) {
+                const typeNames = { 'flashcard': '📇 Flashcards', 'decision_tree': '🌳 Árbol de Decisión', 'summary': '📄 Resumen' };
+                recommendationBadge = `<span class="badge badge-warning mb-2">🎲 ${typeNames[material.actualType]}</span>`;
+            }
+            
+            modalHTML += `
+                <div class="col-md-6 mb-3">
+                    <div class="card ${cardClass} h-100 material-option-card" data-type="${dataType}" data-is-recommendation="${isRecommendationCard}" style="cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div class="card-body text-center">
+                            ${recommendationBadge}
+                            <h3 style="font-size: 3rem; margin-bottom: 10px;">${material.icon}</h3>
+                            <h5 class="card-title">${material.title}</h5>
+                            <p class="card-text text-muted">${material.description}</p>
+                            ${isRecommendationCard ? '<div class="mt-2"><small class="text-info"><i class="fas fa-magic"></i> Selección inteligente</small></div>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        modalHTML += '</div>';
+        
+        $('#materialSelectorBody').html(modalHTML);
+        $('#materialSelectorModal').modal('show');
+        
+        $('.material-option-card').on('click', function() {
+            const selectedType = $(this).data('type');
+            const isRecommendationCard = $(this).data('is-recommendation') === true || $(this).data('is-recommendation') === 'true';
+            generateMaterial(selectedType, isRecommendationCard, isRecommendationCard);
+        });
+    }
+
+    function showLoadingModal(materialType) {
+        const materialNames = {
+            'flashcard': 'Flashcards Interactivas',
+            'decision_tree': 'Árbol de Decisión',
+            'summary': 'Resumen Estructurado'
+        };
+        
+        $('#loadingTitle').text(`Generando ${materialNames[materialType] || 'Material'}...`);
+        $('#loadingSubtitle').text('Paso 1 de 2: Creando tu material personalizado');
+        $('#loadingProgress').css('width', '10%');
+        $('#loadingModal').modal('show');
+        
+        // Actualizar mensajes durante la espera
+        setTimeout(() => {
+            $('#loadingSubtitle').text('Paso 1 de 2: Generando material con IA...');
+            $('#loadingProgress').css('width', '30%');
+        }, 5000);
+        
+        setTimeout(() => {
+            $('#loadingSubtitle').text('Paso 1 de 2: Procesando contenido personalizado...');
+            $('#loadingProgress').css('width', '50%');
+        }, 30000);
+        
+        setTimeout(() => {
+            $('#loadingTitle').text('Preparando Quiz Adaptativo...');
+            $('#loadingSubtitle').text('Paso 2 de 2: Generando preguntas de evaluación...');
+            $('#loadingProgress').css('width', '70%');
+            $('#loadingDetail').text('El quiz se generará automáticamente para evaluar tu aprendizaje.');
+        }, 120000);
+        
+        setTimeout(() => {
+            $('#loadingSubtitle').text('Paso 2 de 2: Finalizando...');
+            $('#loadingProgress').css('width', '90%');
+        }, 180000);
+    }
+
+    function hideLoadingModal() {
+        $('#loadingModal').modal('hide');
+    }
+
+    function generateMaterial(materialType, wasRecommended, followedRecommendation) {
+        const token = localStorage.getItem('access_token');
+        
+        $('#materialSelectorModal').modal('hide');
+        setTimeout(() => {
+            showLoadingModal(materialType);
+        }, 500);
+        
+        $.ajax({
+            url: '/api/texts/generate-material-and-quiz/',
+            type: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            },
+            timeout: 300000,
+            data: JSON.stringify({
+                material_type: materialType,
+                attempt_id: attemptId,
+                was_recommended: wasRecommended,
+                followed_recommendation: followedRecommendation
+            }),
+            success: function(response) {
+                hideLoadingModal();
+                toastr.success('¡Material y Quiz listos! Redirigiendo...');
+                
+                if (response.material_id) {
+                    window.location.href = `/material/${response.material_id}/`;
+                } else {
+                    window.location.reload();
+                }
+            },
+            error: function(xhr) {
+                hideLoadingModal();
+                toastr.error('Error al generar: ' + (xhr.responseJSON?.error || 'Error desconocido'));
+            }
+        });
     }
 </script>
 {% endblock %}

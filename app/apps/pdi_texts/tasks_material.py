@@ -29,7 +29,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configurar Gemini
-genai.configure(api_key="AIzaSyCiuS4-BEmH9Hc_c0XRXv20n2n8HJYcLso")
+genai.configure(api_key="")
 
 # Tags HTML permitidos para sanitización
 ALLOWED_TAGS = [

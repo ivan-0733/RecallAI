@@ -253,52 +253,65 @@
         loadStats();
     });
 
-    // --- NUEVA FUNCIÓN: Cargar Rutas de Aprendizaje ---
-    function loadActivePaths() {
-        const token = localStorage.getItem('access_token');
-        return $.ajax({
-            url: '/api/user/paths/', // Endpoint que agregamos en views.py
-            type: 'GET',
-            headers: { 'Authorization': 'Bearer ' + token },
-            success: function(paths) {
-                activePathsCache = {};
-                let html = '';
-                
-                if (paths.length > 0) {
-                    $('#activePathsContainer').show();
-                    paths.forEach(path => {
-                        // Guardar en cache para usar al renderizar textos
-                        activePathsCache[path.text_id] = path;
-                        
-                        // Barra de progreso visual
-                        let progressPercent = 0;
-                        if (path.current_session === 0) progressPercent = 10;
-                        else if (path.current_session === 1) progressPercent = 35;
-                        else if (path.current_session === 2) progressPercent = 60;
-                        else if (path.is_completed) progressPercent = 90;
+// --- NUEVA FUNCIÓN: Cargar Rutas de Aprendizaje ---
+function loadActivePaths() {
+    const token = localStorage.getItem('access_token');
+    return $.ajax({
+        url: '/api/user/paths/',
+        type: 'GET',
+        headers: { 'Authorization': 'Bearer ' + token },
+        success: function(paths) {
+            activePathsCache = {};
+            let html = '';
+            
+            if (paths.length > 0) {
+                $('#activePathsContainer').show();
+                paths.forEach(path => {
+                    // Guardar en cache para usar al renderizar textos
+                    activePathsCache[path.text_id] = path;
+                    
+                    // Barra de progreso visual (7 sesiones = 0 a 6)
+                    let progressPercent = 0;
+                    let progressClass = 'bg-info';
+                    let statusText = '';
+                    
+                    if (path.is_completed) {
+                        // ✅ COMPLETADO - Barra verde al 100%
+                        progressPercent = 100;
+                        progressClass = 'bg-success';
+                        statusText = '¡Ruta completada! Realiza el Post-Test para finalizar.';
+                    } else {
+                        // Calcular progreso basado en sesión actual (0-6 = 7 sesiones)
+                        progressPercent = Math.round((path.current_session / 7) * 100);
+                        if (path.current_session === 0) {
+                            statusText = 'Has completado el Pre-Test. Elige tu material.';
+                        } else {
+                            statusText = `Sesión ${path.current_session} de 7. Sigue estudiando el material adaptativo.`;
+                        }
+                    }
 
-                        html += `
-                            <div class="callout callout-info">
-                                <h5>${path.text_title} - <small class="text-muted">${path.status_label}</small></h5>
-                                <div class="progress mb-2" style="height: 10px;">
-                                    <div class="progress-bar bg-info" role="progressbar" style="width: ${progressPercent}%;" 
-                                         aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <p class="mb-1">
-                                    Estás siguiendo la ruta experimental. 
-                                    ${path.current_session === 0 ? 'Has completado el Pre-Test. Elige tu material.' : 'Sigue estudiando el material adaptativo.'}
-                                </p>
+                    html += `
+                        <div class="callout ${path.is_completed ? 'callout-success' : 'callout-info'}">
+                            <h5>${path.text_title} - <small class="text-muted">${path.status_label}</small></h5>
+                            <div class="progress mb-2" style="height: 10px;">
+                                <div class="progress-bar ${progressClass}" role="progressbar" style="width: ${progressPercent}%;" 
+                                     aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
-                        `;
-                    });
-                    $('#activePathsBody').html(html);
-                } else {
-                    $('#activePathsContainer').hide();
-                }
-            },
-            error: function(e) { console.log("No hay paths activos o error al cargar"); }
-        });
-    }
+                            <p class="mb-1">
+                                ${path.is_completed ? '<i class="fas fa-check-circle text-success"></i>' : '<i class="fas fa-road text-info"></i>'}
+                                ${statusText}
+                            </p>
+                        </div>
+                    `;
+                });
+                $('#activePathsBody').html(html);
+            } else {
+                $('#activePathsContainer').hide();
+            }
+        },
+        error: function(e) { console.log("No hay paths activos o error al cargar"); }
+    });
+}
 
     // Función para cargar textos
     function loadTexts() {
@@ -331,99 +344,109 @@
         });
     }
 
-    // Función para renderizar textos (MODIFICADA PARA EL FLUJO)
-    function renderTexts(texts) {
-        let html = '';
+// Función para renderizar textos (MODIFICADA PARA EL FLUJO)
+function renderTexts(texts) {
+    let html = '';
+    
+    texts.forEach(function(text) {
+        const difficultyBadge = getDifficultyBadge(text.difficulty);
         
-        texts.forEach(function(text) {
-            const difficultyBadge = getDifficultyBadge(text.difficulty);
+        // Revisar si este texto tiene un Path activo
+        const activePath = activePathsCache[text.id];
+        
+        let statusHTML = '';
+        let buttonsHTML = '';
+        
+        if (activePath) {
+            // --- MODO FLUJO EXPERIMENTAL ACTIVO ---
             
-            // Revisar si este texto tiene un Path activo
-            const activePath = activePathsCache[text.id];
-            
-            let statusHTML = '';
-            let buttonsHTML = '';
-            
-            if (activePath) {
-                // --- MODO FLUJO EXPERIMENTAL ACTIVO ---
-                statusHTML = `<span class="badge badge-info">🔄 En Curso: Sesión ${activePath.current_session}</span>`;
-                
-                if (activePath.is_completed) {
-                    buttonsHTML = `
-                        <a href="/text/${text.id}/post-test/" class="btn btn-danger btn-block mb-2">
-                            <i class="fas fa-flag-checkered"></i> REALIZAR POST-TEST
-                        </a>
-                    `;
-                } else if (activePath.current_session === 0) {
-                    buttonsHTML = `
-                        <a href="/quiz/${text.id}/results/" class="btn btn-primary btn-block mb-2">
-                            <i class="fas fa-chart-bar"></i> Ver Resultados y Elegir Material
-                        </a>
-                    `;
-                } else if (activePath.has_pending_quiz) {
-                    // --- NUEVO: BOTÓN PARA TOMAR QUIZ ADAPTATIVO ---
-                    buttonsHTML = `
-                        <a href="/quiz/${text.id}/adaptive/${activePath.adaptive_quiz_id}/" class="btn btn-warning btn-block mb-2 font-weight-bold">
-                            <i class="fas fa-exclamation-circle"></i> Tomar Quiz Sesión ${activePath.current_session}
-                        </a>
-                    `;
-                } else {
-                    // Si no hay quiz, es tiempo de estudiar
-                    buttonsHTML = `
-                        <a href="/materials/study/${text.id}/" class="btn btn-success btn-block mb-2">
-                            <i class="fas fa-brain"></i> Ir a Sesión ${activePath.current_session}
-                        </a>
-                    `;
-                }
-
-            } else if (text.has_been_attempted) {
-                // Completado antiguo o fuera de flujo
-                statusHTML = '<span class="badge badge-success">✅ Completado</span>';
+            if (activePath.is_completed) {
+                // ✅ FLUJO COMPLETADO - Mostrar Post-Test y Mis Materiales
+                statusHTML = '<span class="badge badge-success">✅ Ruta Completada</span>';
                 buttonsHTML = `
-                    <a href="/quiz/${text.id}/results/" class="btn btn-info btn-sm mb-2">
-                        <i class="fas fa-eye"></i> Ver Resultados
+                    <a href="/text/${text.id}/post-test/" class="btn btn-danger btn-block mb-2">
+                        <i class="fas fa-flag-checkered"></i> REALIZAR POST-TEST
                     </a>
-                    <a href="/materials/history/${text.id}/" class="btn btn-warning btn-sm mb-2">
-                        <i class="fas fa-lightbulb"></i> Historial
+                    <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
+                        <i class="fas fa-book"></i> Ver Mis Materiales
                     </a>
                 `;
             } else {
-                // Nuevo, nunca tocado
-                statusHTML = '<span class="badge badge-secondary">🆕 Nuevo</span>';
-                buttonsHTML = `
-                    <a href="/text/${text.id}/" class="btn btn-primary btn-block">
-                        <i class="fas fa-book-open"></i> Leer e Iniciar (Sesión 0)
-                    </a>
-                `;
+                // En curso
+                statusHTML = `<span class="badge badge-info">🔄 En Curso: Sesión ${activePath.current_session}</span>`;
+                
+                if (activePath.current_session === 0) {
+                    // Sesión 0: Acaba de tomar el Pre-Test
+                    if (activePath.has_material) {
+                        // Ya tiene material → Ir a Mis Materiales
+                        buttonsHTML = `
+                            <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
+                                <i class="fas fa-book"></i> Ver Mis Materiales
+                            </a>
+                        `;
+                    } else {
+                        // No tiene material → Ir a resultados para elegir
+                        buttonsHTML = `
+                            <a href="/quiz/${text.id}/results/" class="btn btn-primary btn-block mb-2">
+                                <i class="fas fa-chart-bar"></i> Ver Resultados y Elegir Material
+                            </a>
+                        `;
+                    }
+                } else {
+                    // Sesión 1, 2, 3... → SIEMPRE ir a Mis Materiales
+                    buttonsHTML = `
+                        <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
+                            <i class="fas fa-book"></i> Ver Mis Materiales
+                        </a>
+                    `;
+                }
             }
-            
-            html += `
-                <div class="col-md-4 mb-3">
-                    <div class="card ${activePath ? 'border-info' : ''}">
-                        <div class="card-body">
-                            <h5 class="card-title">${text.title}</h5>
-                            <p class="card-text text-muted">${text.description || 'Sin descripción'}</p>
-                            
-                            <div class="mb-2">
-                                <span class="badge badge-primary">${text.topic}</span>
-                                ${difficultyBadge}
-                                ${statusHTML}
-                            </div>
-                            
-                            <div class="text-muted small mb-3">
-                                <i class="far fa-clock"></i> ${text.estimated_time_minutes} min
-                                <i class="fas fa-font ml-2"></i> ${text.word_count} palabras
-                            </div>
-                            
-                            ${buttonsHTML}
+
+        } else if (text.has_been_attempted) {
+            // Completado antiguo o fuera de flujo (sin path activo pero con intentos)
+            statusHTML = '<span class="badge badge-secondary">📋 Con Historial</span>';
+            buttonsHTML = `
+                <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
+                    <i class="fas fa-book"></i> Ver Mis Materiales
+                </a>
+            `;
+        } else {
+            // Nuevo, nunca tocado
+            statusHTML = '<span class="badge badge-secondary">🆕 Nuevo</span>';
+            buttonsHTML = `
+                <a href="/text/${text.id}/" class="btn btn-primary btn-block">
+                    <i class="fas fa-book-open"></i> Leer e Iniciar (Sesión 0)
+                </a>
+            `;
+        }
+        
+        html += `
+            <div class="col-md-4 mb-3">
+                <div class="card ${activePath ? (activePath.is_completed ? 'border-success' : 'border-info') : ''}">
+                    <div class="card-body">
+                        <h5 class="card-title">${text.title}</h5>
+                        <p class="card-text text-muted">${text.description || 'Sin descripción'}</p>
+                        
+                        <div class="mb-2">
+                            <span class="badge badge-primary">${text.topic}</span>
+                            ${difficultyBadge}
+                            ${statusHTML}
                         </div>
+                        
+                        <div class="text-muted small mb-3">
+                            <i class="far fa-clock"></i> ${text.estimated_time_minutes} min
+                            <i class="fas fa-font ml-2"></i> ${text.word_count} palabras
+                        </div>
+                        
+                        ${buttonsHTML}
                     </div>
                 </div>
-            `;
-        });
-        
-        $('#textsContainer').html(html);
-    }
+            </div>
+        `;
+    });
+    
+    $('#textsContainer').html(html);
+}
 
     // Helper para badge de dificultad
     function getDifficultyBadge(difficulty) {

@@ -8,7 +8,8 @@ from api.frontend_views import (
     QuizResultsView,
     MaterialsHistoryView,
     MaterialView,             # <--- Nueva clase
-    study_next_material_view  # <--- Nueva función
+    study_next_material_view,  # <--- Nueva función
+    AdaptiveQuizInterfaceView  # ← AGREGAR ESTE IMPORT
 )
 
 app_name = 'frontend'
@@ -21,6 +22,7 @@ urlpatterns = [
     
     # Flujo Estándar
     path('text/<int:text_id>/', TextReaderView.as_view(), name='text_reader'),
+    path('quiz/<int:text_id>/adaptive/<int:quiz_id>/', AdaptiveQuizInterfaceView.as_view(), name='adaptive_quiz_interface'),
     path('quiz/<int:text_id>/', QuizInterfaceView.as_view(), name='quiz_interface'),
     path('quiz/<int:text_id>/results/', QuizResultsView.as_view(), name='quiz_results'),
 
