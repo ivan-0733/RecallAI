@@ -371,12 +371,11 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
             from apps.pdi_texts.tasks import generate_adaptive_quiz_task
             
             # Disparar tarea
+            # La tarea en tasks.py solo recibe learning_path_id y material_id
             generate_adaptive_quiz_task.apply_async(
                 kwargs={
-                    'user_id': user_id,
-                    'text_id': text.id,
-                    'attempt_id': attempt_id,
-                    'learning_path_id': path.id
+                    'learning_path_id': path.id,
+                    'material_id': material.id
                 },
                 countdown=120  # Esperar 2 minutos (120 segundos)
             )

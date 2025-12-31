@@ -8,6 +8,7 @@ from langchain.prompts import PromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
+import re
 from google.genai import types
 
 from apps.pdi_texts.models import PDIText, InitialQuiz
@@ -247,19 +248,32 @@ def generate_adaptive_quiz_task(self, learning_path_id, material_id):
         IMPORTANTE: Devuelve SOLO el JSON. Asegúrate de que "tema" sea idéntico al de la lista proporcionada.
         """
         
-        # Llamar a Gemini (reutilizando tu configuración existente)
+        # Llamar a Gemini
         model = genai.GenerativeModel('gemini-2.5-pro')
         response = model.generate_content(prompt)
-        response_text = response.text.strip()
         
-        # Limpieza JSON (reutilizando tu lógica)
-        if response_text.startswith('```json'):
-            response_text = response_text.replace('```json', '').replace('```', '').strip()
-        elif response_text.startswith('```'):
-            response_text = response_text.replace('```', '').strip()
+        # --- NUEVO BLOQUE DE LIMPIEZA ROBUSTA ---
+        try:
+            raw_text = response.text.strip()
+            # 1. Eliminar bloques de código Markdown con Regex
+            cleaned_text = re.sub(r'```json\s*', '', raw_text, flags=re.IGNORECASE)
+            cleaned_text = re.sub(r'```', '', cleaned_text)
             
-        quiz_data = json.loads(response_text)
-        questions = quiz_data.get('questions', [])
+            # 2. Buscar llaves para extraer solo el objeto JSON (ignora texto intro/final)
+            start_idx = cleaned_text.find('{')
+            end_idx = cleaned_text.rfind('}') + 1
+            
+            if start_idx != -1 and end_idx > start_idx:
+                cleaned_text = cleaned_text[start_idx:end_idx]
+            
+            # 3. Parsear
+            quiz_data = json.loads(cleaned_text)
+            questions = quiz_data.get('questions', [])
+
+        except (json.JSONDecodeError, ValueError, AttributeError) as e:
+            # Si falla, reintenta automáticamente en 30 segundos
+            raise self.retry(exc=e, countdown=30)
+        # -------------------------------------------
         
         # Validación de seguridad: deben ser 20
         if len(questions) != 20:

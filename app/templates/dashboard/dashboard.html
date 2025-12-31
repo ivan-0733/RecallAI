@@ -360,8 +360,15 @@
                             <i class="fas fa-chart-bar"></i> Ver Resultados y Elegir Material
                         </a>
                     `;
+                } else if (activePath.has_pending_quiz) {
+                    // --- NUEVO: BOTÓN PARA TOMAR QUIZ ADAPTATIVO ---
+                    buttonsHTML = `
+                        <a href="/quiz/${text.id}/adaptive/${activePath.adaptive_quiz_id}/" class="btn btn-warning btn-block mb-2 font-weight-bold">
+                            <i class="fas fa-exclamation-circle"></i> Tomar Quiz Sesión ${activePath.current_session}
+                        </a>
+                    `;
                 } else {
-                    // Sesiones 1, 2, 3...
+                    // Si no hay quiz, es tiempo de estudiar
                     buttonsHTML = `
                         <a href="/materials/study/${text.id}/" class="btn btn-success btn-block mb-2">
                             <i class="fas fa-brain"></i> Ir a Sesión ${activePath.current_session}

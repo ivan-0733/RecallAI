@@ -967,19 +967,21 @@
     }
     
     async function endTrackingSession(exitType = 'normal') {
-        // Sincronizar con study_tracker.js
-        const sessionId = (window.studyTracker && window.studyTracker.sessionId) ? window.studyTracker.sessionId : currentSessionId;
-        const startTime = (window.studyTracker && window.studyTracker.sessionStartTime) ? window.studyTracker.sessionStartTime : sessionStartTime;
-        const idle = (window.studyTracker && typeof window.studyTracker.idleTime !== 'undefined') ? window.studyTracker.idleTime : idleTime;
-        const interactions = (window.studyTracker && window.studyTracker.interactionCount) ? window.studyTracker.interactionCount : interactionCount;
-        const scrollDepth = (window.studyTracker && window.studyTracker.maxScrollDepth) ? window.studyTracker.maxScrollDepth : maxScrollDepth;
-        
-        if (!sessionId) {
-            console.log('No hay sesión activa para cerrar');
+        // 1. DELEGAR AL TRACKER OFICIAL (Mismo que usa 'beforeunload')
+        if (window.studyTracker) {
+            console.log(`🔒 Cerrando sesión vía Tracker: ${exitType}`);
+            // Esta función interna de la clase YA TIENE keepalive y los datos correctos
+            await window.studyTracker.endSession(exitType);
             return;
         }
+
+        // 2. FALLBACK DE EMERGENCIA (Solo si el JS principal falló)
+        console.warn("StudyTracker no disponible, usando cierre manual básico");
+        const sessionId = currentSessionId; // Variable global del script
         
-        const totalTime = Math.floor((Date.now() - startTime) / 1000);
+        if (!sessionId) return;
+        
+        const totalTime = Math.floor((Date.now() - sessionStartTime) / 1000);
         
         try {
             await fetch('/api/tracking/session/end/', {
@@ -991,17 +993,18 @@
                 body: JSON.stringify({
                     session_id: sessionId,
                     total_time_seconds: totalTime,
-                    active_time_seconds: Math.max(0, totalTime - idle),
+                    // Si no hay tracker, asumimos todo activo por seguridad
+                    active_time_seconds: totalTime, 
                     exit_type: exitType,
                     metrics: {
-                        total_interactions: interactions,
-                        max_scroll_depth: scrollDepth
+                        total_interactions: interactionCount || 0,
+                        max_scroll_depth: maxScrollDepth || 0
                     }
-                })
+                }),
+                keepalive: true
             });
-            console.log('✅ Sesión cerrada');
         } catch (e) {
-            console.error('Error cerrando sesión:', e);
+            console.error('Error en cierre manual:', e);
         }
     }
     

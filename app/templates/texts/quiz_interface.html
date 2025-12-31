@@ -151,12 +151,26 @@
     let currentQuestionIndex = 0;
     let startTime;
     let timerInterval;
-    let isSubmitting = false; // Flag para prevenir doble submit
+    let isSubmitting = false; 
+    
+    // VARIABLES NUEVAS PARA ADAPTATIVO
+    let isAdaptiveMode = false;
+    let adaptiveQuizId = null;
 
     $(document).ready(function() {
-        // Obtener ID del texto
-        const pathParts = window.location.pathname.split('/');
+        const path = window.location.pathname;
+        const pathParts = path.split('/');
         textId = pathParts[2];
+
+        // DETECCIÓN DE MODO ADAPTATIVO
+        // URL esperada: /quiz/{text_id}/adaptive/{quiz_id}/
+        if (path.includes('/adaptive/')) {
+            isAdaptiveMode = true;
+            // El ID suele estar en la posición 4 o 5 dependiendo de tus slashes
+            // Ajusta este índice si tu URL cambia
+            adaptiveQuizId = pathParts[4]; 
+            console.log("Modo Adaptativo. ID:", adaptiveQuizId);
+        }
         
         const token = localStorage.getItem('access_token');
         if (!token) {
@@ -174,14 +188,27 @@
     function loadQuiz() {
         const token = localStorage.getItem('access_token');
         
+        // Decidir URL
+        let apiUrl = `/api/texts/${textId}/quiz/`;
+        if (isAdaptiveMode && adaptiveQuizId) {
+            apiUrl = `/api/texts/${textId}/adaptive-quiz/${adaptiveQuizId}/`;
+        }
+
         $.ajax({
-            url: `/api/texts/${textId}/quiz/`,
+            url: apiUrl,
             type: 'GET',
             headers: {
                 'Authorization': 'Bearer ' + token
             },
             success: function(response) {
                 quizData = response.quiz;
+                
+                // Título dinámico
+                let titulo = isAdaptiveMode ? 
+                    `Sesión ${quizData.session_number || ''}: ${quizData.text_title}` : 
+                    `Diagnóstico: ${quizData.text_title}`;
+
+                $('#quizTitle').text(titulo);
                 
                 $('#quizTitle').text('Cuestionario: ' + quizData.text_title);
                 $('#attemptNumber').text(response.next_attempt_number);
@@ -390,6 +417,17 @@
         // ✅ IMPORTANTE: Remover warning ANTES de enviar
         window.onbeforeunload = null;
         
+        // Construir payload dinámico
+        const payload = {
+            answers: answers,
+            time_spent_seconds: timeSpent,
+            quiz_type: isAdaptiveMode ? 'adaptive' : 'initial'
+        };
+        
+        if (isAdaptiveMode) {
+            payload.quiz_id = adaptiveQuizId;
+        }
+
         $.ajax({
             url: `/api/texts/${textId}/submit-quiz/`,
             type: 'POST',
@@ -397,10 +435,7 @@
                 'Authorization': 'Bearer ' + token,
                 'Content-Type': 'application/json'
             },
-            data: JSON.stringify({
-                answers: answers,
-                time_spent_seconds: timeSpent
-            }),
+            data: JSON.stringify(payload),
             success: function(response) {
                 // Guardar resultado en localStorage
                 localStorage.setItem('quiz_result', JSON.stringify(response));

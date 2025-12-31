@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status
+from rest_framework.views import APIView # <--- NUEVO IMPORT
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -107,6 +108,33 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         except InitialQuiz.DoesNotExist:
             return Response(
                 {'error': 'Cuestionario no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+    @action(detail=True, methods=['get'], url_path='adaptive-quiz/(?P<quiz_id>[^/.]+)')
+    def get_adaptive_details(self, request, pk=None, quiz_id=None):
+        """
+        Obtener preguntas de un quiz adaptativo específico
+        GET /api/texts/{id}/adaptive-quiz/{quiz_id}/
+        """
+        try:
+            adaptive_quiz = AdaptiveQuiz.objects.get(id=quiz_id, user=request.user)
+            
+            # Construir estructura similar al InitialQuiz para reutilizar el frontend
+            return Response({
+                'quiz': {
+                    'text_title': adaptive_quiz.text.title,
+                    'total_questions': len(adaptive_quiz.questions_json),
+                    'questions_json': adaptive_quiz.questions_json,
+                    'is_adaptive': True,
+                    'session_number': adaptive_quiz.session_number
+                },
+                'attempt_number': 1,
+                'next_attempt_number': 1
+            })
+        except AdaptiveQuiz.DoesNotExist:
+            return Response(
+                {'error': 'Quiz adaptativo no encontrado o no te pertenece'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -1143,3 +1171,58 @@ class AnalyticsViewSet(viewsets.ViewSet):
             return Response({
                 'error': 'Material no encontrado'
             }, status=status.HTTP_404_NOT_FOUND)
+        
+class UserActivePathsView(APIView):
+    """
+    Vista para el Dashboard: Devuelve los Learning Paths activos del usuario
+    y calcula si tienen material pendiente o quizes por tomar.
+    GET /api/user/paths/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        active_paths = StudentLearningPath.objects.filter(
+            user=request.user,
+            is_completed=False
+        ).select_related('text')
+
+        data = []
+        for path in active_paths:
+            # Estado base
+            status_label = f"Sesión {path.current_session}"
+            
+            # Buscar si hay un quiz adaptativo pendiente para este path
+            pending_quiz = AdaptiveQuiz.objects.filter(
+                learning_path=path,
+                user=request.user
+            ).order_by('-created_at').first()
+
+            has_pending_quiz = False
+            adaptive_quiz_id = None
+            
+            if pending_quiz:
+                # Verificar si YA se respondió a este quiz específico
+                # Buscamos un intento creado DESPUÉS de que se generó el quiz
+                already_taken = QuizAttempt.objects.filter(
+                    user=request.user,
+                    quiz_type='adaptive',
+                    created_at__gte=pending_quiz.created_at
+                ).exists()
+                
+                if not already_taken:
+                    has_pending_quiz = True
+                    adaptive_quiz_id = pending_quiz.id
+                    status_label = f"Quiz Sesión {path.current_session} Pendiente"
+
+            data.append({
+                'text_id': path.text.id,
+                'text_title': path.text.title,
+                'current_session': path.current_session,
+                'is_completed': path.is_completed,
+                'status_label': status_label,
+                'has_pending_quiz': has_pending_quiz,
+                'adaptive_quiz_id': adaptive_quiz_id,
+                'started_at': path.created_at
+            })
+        
+        return Response(data)
