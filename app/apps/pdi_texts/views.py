@@ -10,6 +10,8 @@ from datetime import timedelta
 from bs4 import BeautifulSoup  # Si no está ya importada
 import re  # Si no está ya importada
 
+from collections import Counter
+
 from apps.pdi_texts.recommendation import get_recommended_material
 from apps.pdi_texts.tasks_material import generate_didactic_material
 from apps.pdi_texts.models import MaterialRequest, UserDidacticMaterial
@@ -127,7 +129,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         # Buscar último intento
         last_attempt = QuizAttempt.objects.filter(
             user=request.user,
-            quiz=quiz
+            pdi_text=text  # ← CAMBIO AQUÍ
         ).order_by('-created_at').first()
         
         if not last_attempt:
@@ -164,16 +166,19 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         ]
         topic_counter = Counter(incorrect_topics)
         
+        # Calcular si aprobó (score >= 80)
+        passed = last_attempt.score >= 80
+        
         return Response({
             'attempt': QuizAttemptSerializer(last_attempt).data,
             'score': last_attempt.score,
             'correct_count': sum(1 for ans in detailed_answers if ans.get('is_correct', False)),
             'total_questions': quiz.total_questions,
-            'passed': last_attempt.passed(),
+            'passed': passed,
             'weak_topics': last_attempt.weak_topics,
             'topic_errors': dict(topic_counter),
             'detailed_answers': detailed_answers,
-            'message': '¡Excelente! Has aprobado' if last_attempt.passed() else 'Necesitas reforzar algunos temas'
+            'message': '¡Excelente! Has aprobado' if passed else 'Necesitas reforzar algunos temas'
         })
     
     @action(detail=True, methods=['post'], url_path='submit-quiz')
@@ -203,6 +208,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         if quiz_type == 'initial':
             if not hasattr(text, 'initial_quiz'):
                 return Response({'error': 'No hay quiz inicial para este texto'}, status=404)
+            quiz_instance = text.initial_quiz
             questions_data = text.initial_quiz.get_questions() 
         
         elif quiz_type == 'adaptive':
@@ -229,11 +235,17 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             user_ans_obj = next((a for a in answers if int(a.get('question_index', -1)) == i), None)
             
             # Obtener la opción seleccionada (A, B, C, D)
-            user_response = user_ans_obj.get('selected_option') if user_ans_obj else None
+            user_response = user_ans_obj.get('selected_answer') if user_ans_obj else None
             
             # Comparar (Asumiendo que 'respuesta_correcta' es 'A', 'B', etc.)
             correct_option = question.get('respuesta_correcta')
             is_correct = (user_response == correct_option)
+
+            print(f"DEBUG - Pregunta {i}:")
+            print(f"  user_ans_obj: {user_ans_obj}")
+            print(f"  user_response: {user_response}")
+            print(f"  correct_option: {correct_option}")
+            print(f"  is_correct: {is_correct}")
             
             if is_correct:
                 correct_count += 1
@@ -339,13 +351,23 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
                 next_action = 'wait_for_material'
                 message = f'Sesión {current_session} finalizada. Generando material para Sesión {path.current_session}...'
 
+        topic_counter = Counter(weak_topics)
+
         return Response({
             'status': 'success',
             'score': final_score,
             'correct_count': correct_count,
-            'weak_topics': weak_topics,
-            'next_action': next_action, # El frontend lee esto para redirigir
-            'message': message
+            'total_questions': len(questions_data),
+            'passed': final_score >= 80,  # Umbral de aprobación
+            'weak_topics': list(set(weak_topics)),  # Sin duplicados
+            'topic_errors': dict(topic_counter),
+            'detailed_answers': detailed_answers,
+            'attempt': {
+                'id': attempt.id,
+                'time_spent_seconds': time_spent,
+            },
+            'next_action': next_action,
+            'message': message if message else ('¡Excelente! Has aprobado' if final_score >= 80 else 'Necesitas reforzar algunos temas')
         })
     
     @action(detail=False, methods=['post'], url_path='generate-material')

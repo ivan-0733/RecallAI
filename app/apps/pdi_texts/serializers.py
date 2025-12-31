@@ -233,7 +233,7 @@ class QuizSubmissionSerializer(serializers.Serializer):
 class QuizAttemptSerializer(serializers.ModelSerializer):
     """Serializer para mostrar resultado de intento"""
     
-    text_title = serializers.CharField(source='quiz.text.title', read_only=True)
+    text_title = serializers.SerializerMethodField()  # ← CAMBIO
     passed = serializers.SerializerMethodField()
     
     class Meta:
@@ -249,8 +249,17 @@ class QuizAttemptSerializer(serializers.ModelSerializer):
             'created_at'
         ]
     
+    def get_text_title(self, obj):
+        # ✅ CORREGIDO: Obtener título desde pdi_text o quiz
+        if obj.pdi_text:
+            return obj.pdi_text.title
+        elif obj.quiz and obj.quiz.text:
+            return obj.quiz.text.title
+        return 'Sin título'
+    
     def get_passed(self, obj):
-        return obj.passed()
+        # ✅ CORREGIDO: Calcular directamente sin método del modelo
+        return obj.score >= 80
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
