@@ -1372,63 +1372,91 @@ class MaterialsHistoryAPIView(APIView):
         
 class UserActivePathsView(APIView):
     """
-    Vista para el Dashboard: Devuelve los Learning Paths activos del usuario
-    y calcula si tienen material pendiente o quizes por tomar.
-    GET /api/user/paths/
+    Vista para el Dashboard: Devuelve Paths activos Y completados,
+    incluyendo resumen de resultados (Pre vs Post) para el dashboard.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # CORRECCIÓN: Usamos '-created_at' ya que 'updated_at' no existe en este modelo.
         active_paths = StudentLearningPath.objects.filter(
-            user=request.user,
-            is_completed=False
-        ).select_related('text')
+            user=request.user
+        ).select_related('text').order_by('-created_at')
 
         data = []
         for path in active_paths:
-            # Estado base
-            status_label = f"Sesión {path.current_session}"
+            user = request.user
+            text = path.text
             
-            # ✅ NUEVO: Verificar si ya tiene material generado
-            has_material = UserDidacticMaterial.objects.filter(
-                user=request.user,
-                text=path.text
-            ).exists()
+            # --- Lógica existente de Material y Quiz Adaptativo ---
+            has_material = UserDidacticMaterial.objects.filter(user=user, text=text).exists()
             
-            # Buscar si hay un quiz adaptativo pendiente para este path
             pending_quiz = AdaptiveQuiz.objects.filter(
-                learning_path=path,
-                user=request.user
+                learning_path=path, user=user
             ).order_by('-created_at').first()
 
             has_pending_quiz = False
             adaptive_quiz_id = None
             
             if pending_quiz:
-                # Verificar si YA se respondió a este quiz específico
-                # Buscamos un intento creado DESPUÉS de que se generó el quiz
                 already_taken = QuizAttempt.objects.filter(
-                    user=request.user,
-                    pdi_text=path.text,
-                    quiz_type='adaptive',
+                    user=user, pdi_text=text, quiz_type='adaptive',
                     created_at__gte=pending_quiz.created_at
                 ).exists()
-                
                 if not already_taken:
                     has_pending_quiz = True
                     adaptive_quiz_id = pending_quiz.id
-                    status_label = f"Quiz Sesión {path.current_session} Pendiente"
+
+            # --- NUEVA LÓGICA: Obtener datos de Pre y Post Test ---
+            def get_quiz_data(q_type):
+                attempt = QuizAttempt.objects.filter(
+                    user=user, pdi_text=text, quiz_type=q_type
+                ).order_by('-created_at').first()
+                
+                if not attempt:
+                    return None
+                
+                # Calcular temas fuertes (respuestas correctas)
+                strong_topics = set()
+                if attempt.answers_json:
+                    for ans in attempt.answers_json:
+                        if ans.get('is_correct') and ans.get('topic'):
+                            strong_topics.add(ans['topic'])
+                
+                return {
+                    'score': attempt.score,
+                    'weak_topics': attempt.weak_topics[:3], # Top 3 débiles
+                    'strong_topics': list(strong_topics)[:3] # Top 3 fuertes
+                }
+
+            pre_test_summary = get_quiz_data('initial')
+            post_test_summary = get_quiz_data('post_test')
+            has_post_test = post_test_summary is not None
+
+            # Determinar etiqueta de estado
+            status_label = f"Sesión {path.current_session}"
+            if path.is_completed:
+                if has_post_test:
+                    status_label = "Curso Finalizado"
+                else:
+                    status_label = "Listo para Post-Test"
+            elif has_pending_quiz:
+                status_label = "Quiz Pendiente"
 
             data.append({
-                'text_id': path.text.id,
-                'text_title': path.text.title,
+                'text_id': text.id,
+                'text_title': text.title,
                 'current_session': path.current_session,
                 'is_completed': path.is_completed,
                 'status_label': status_label,
-                'has_material': has_material,  # ✅ NUEVO CAMPO
+                'has_material': has_material,
                 'has_pending_quiz': has_pending_quiz,
                 'adaptive_quiz_id': adaptive_quiz_id,
-                'started_at': path.created_at
+                'started_at': path.created_at,
+                # Datos nuevos para el frontend
+                'has_post_test': has_post_test,
+                'pre_test_summary': pre_test_summary,
+                'post_test_summary': post_test_summary
             })
         
         return Response(data)

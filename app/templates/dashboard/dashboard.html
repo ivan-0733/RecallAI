@@ -358,34 +358,63 @@ function renderTexts(texts) {
         let buttonsHTML = '';
         
         if (activePath) {
-            // --- MODO FLUJO EXPERIMENTAL ACTIVO ---
+            // --- MODO FLUJO ACTIVO ---
             
             if (activePath.is_completed) {
-                // ✅ FLUJO COMPLETADO - Mostrar Post-Test y Mis Materiales
-                statusHTML = '<span class="badge badge-success">✅ Ruta Completada</span>';
-                buttonsHTML = `
-                    <a href="/text/${text.id}/post-test/" class="btn btn-danger btn-block mb-2">
-                        <i class="fas fa-flag-checkered"></i> REALIZAR POST-TEST
-                    </a>
-                    <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
-                        <i class="fas fa-book"></i> Ver Mis Materiales
-                    </a>
-                `;
+                
+                // CASO 1: YA HIZO EL POST-TEST (TODO TERMINADO)
+                if (activePath.has_post_test) {
+                    const pre = activePath.pre_test_summary || { score: 0, weak_topics: [] };
+                    const post = activePath.post_test_summary || { score: 0, weak_topics: [], strong_topics: [] };
+                    
+                    statusHTML = '<span class="badge badge-success">🏆 Finalizado</span>';
+                    
+                    // Aquí construimos la lista simple que pediste
+                    buttonsHTML = `
+                        <div class="alert alert-light border p-2 mb-2" style="font-size: 0.85rem; line-height: 1.2;">
+                            <div class="d-flex justify-content-between border-bottom pb-1 mb-1">
+                                <span>Pre-Test: <b>${Math.round(pre.score)}%</b></span>
+                                <span>Post-Test: <b>${Math.round(post.score)}%</b></span>
+                            </div>
+                            <div class="mb-1">
+                                <span class="text-danger">Débiles:</span> ${post.weak_topics.join(', ') || 'Ninguno'}
+                            </div>
+                            <div>
+                                <span class="text-success">Fuertes:</span> ${post.strong_topics.join(', ') || 'Todos'}
+                            </div>
+                        </div>
+
+                        <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
+                            <i class="fas fa-book"></i> Ver Mis Materiales
+                        </a>
+                    `;
+
+                } else {
+                    // CASO 2: LISTO PARA POST-TEST (SOLO FALTA EL ÚLTIMO EXAMEN)
+                    statusHTML = '<span class="badge badge-warning">🏁 Listo para Examen Final</span>';
+                    buttonsHTML = `
+                        <a href="/text/${text.id}/post-test/" class="btn btn-danger btn-block mb-2">
+                            <i class="fas fa-flag-checkered"></i> TOMAR POST QUIZ
+                        </a>
+                        <a href="/materials/history/${text.id}/" class="btn btn-outline-success btn-block mb-2">
+                            <i class="fas fa-book"></i> Ver Mis Materiales
+                        </a>
+                    `;
+                }
+
             } else {
-                // En curso
-                statusHTML = `<span class="badge badge-info">🔄 En Curso: Sesión ${activePath.current_session}</span>`;
+                // CASO 3: EN CURSO (SESIONES INTERMEDIAS)
+                statusHTML = `<span class="badge badge-info">🔄 Sesión ${activePath.current_session}</span>`;
                 
                 if (activePath.current_session === 0) {
                     // Sesión 0: Acaba de tomar el Pre-Test
                     if (activePath.has_material) {
-                        // Ya tiene material → Ir a Mis Materiales
                         buttonsHTML = `
                             <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
                                 <i class="fas fa-book"></i> Ver Mis Materiales
                             </a>
                         `;
                     } else {
-                        // No tiene material → Ir a resultados para elegir
                         buttonsHTML = `
                             <a href="/quiz/${text.id}/results/" class="btn btn-primary btn-block mb-2">
                                 <i class="fas fa-chart-bar"></i> Ver Resultados y Elegir Material
@@ -393,7 +422,7 @@ function renderTexts(texts) {
                         `;
                     }
                 } else {
-                    // Sesión 1, 2, 3... → SIEMPRE ir a Mis Materiales
+                    // Sesiones normales
                     buttonsHTML = `
                         <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
                             <i class="fas fa-book"></i> Ver Mis Materiales
@@ -403,7 +432,7 @@ function renderTexts(texts) {
             }
 
         } else if (text.has_been_attempted) {
-            // Completado antiguo o fuera de flujo (sin path activo pero con intentos)
+            // Completado antiguo o fuera de flujo
             statusHTML = '<span class="badge badge-secondary">📋 Con Historial</span>';
             buttonsHTML = `
                 <a href="/materials/history/${text.id}/" class="btn btn-success btn-block mb-2">
@@ -411,7 +440,7 @@ function renderTexts(texts) {
                 </a>
             `;
         } else {
-            // Nuevo, nunca tocado
+            // Nuevo
             statusHTML = '<span class="badge badge-secondary">🆕 Nuevo</span>';
             buttonsHTML = `
                 <a href="/text/${text.id}/" class="btn btn-primary btn-block">
