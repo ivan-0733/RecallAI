@@ -11,7 +11,8 @@ from datetime import timedelta
 from apps.pdi_texts.models import (
     PDIText, InitialQuiz, QuizAttempt, UserProfile,
     UserDidacticMaterial, MaterialRequest, MaterialEffectiveness,
-    StudySession, InteractionEvent, SectionTimeTracking, HeatmapData
+    StudySession, InteractionEvent, SectionTimeTracking, HeatmapData,
+    StudentLearningPath  # <--- AGREGAR ESTO
 )
 from apps.pdi_texts.tasks import generate_initial_quiz
 from apps.pdi_texts.utils import (
@@ -1813,3 +1814,43 @@ class MaterialEffectivenessAdmin(admin.ModelAdmin):
             return format_html('<span style="font-size: 20px;">✅</span>')
         return format_html('<span style="font-size: 20px;">❌</span>')
     was_effective_icon.short_description = 'Efectivo'
+
+@admin.register(StudentLearningPath)
+class StudentLearningPathAdmin(admin.ModelAdmin):
+    list_display = ('user', 'text', 'current_session', 'is_completed', 'created_at')
+    list_filter = ('is_completed', 'text')
+    search_fields = ('user__email', 'text__title')
+    actions = ['force_finish_path']
+
+    @admin.action(description="🏁 Forzar Fin de Ruta (Activar Post-Test)")
+    def force_finish_path(self, request, queryset):
+        updated_count = 0
+        skipped_count = 0
+
+        for path in queryset:
+            # 1. VERIFICACIÓN DE SEGURIDAD:
+            # Si ya hizo el Post-Test, ignoramos esta cuenta para no alterar datos finales.
+            # Buscamos si existe un QuizAttempt marcado como 'post_test'
+            has_post_test = QuizAttempt.objects.filter(
+                user=path.user,
+                pdi_text=path.text,
+                quiz_type='post_test'
+            ).exists()
+
+            if has_post_test:
+                skipped_count += 1
+                continue # Skip y siguiente
+
+            # 2. APLICAR CAMBIOS:
+            # Solo marcamos como completado. El sistema automáticamente ignorará
+            # los quizzes pendientes en el dashboard y usará el último intento válido.
+            path.is_completed = True
+            path.current_session = 7 # Máximo visual para la barra de progreso
+            path.save()
+            updated_count += 1
+
+        self.message_user(
+            request, 
+            f"✅ Proceso terminado: {updated_count} rutas finalizadas forzosamente. "
+            f"🚫 {skipped_count} omitidas porque ya tenían el Post-Test contestado."
+        )

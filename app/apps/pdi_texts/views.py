@@ -601,38 +601,38 @@ class QuizAttemptViewSet(viewsets.ReadOnlyModelViewSet):
         Obtener estadísticas generales del usuario
         GET /api/attempts/stats/
         """
+        user = request.user
         attempts = self.get_queryset()
         
-        if not attempts.exists():
-            return Response({
-                'total_attempts': 0,
-                'texts_studied': 0,
-                'average_score': 0,
-                'texts_passed': 0,
-                'total_time_minutes': 0
-            })
-        
-        stats = attempts.aggregate(
-            total_attempts=Count('id'),
-            average_score=Avg('score'),
-            total_time_seconds=Count('time_spent_seconds')
-        )
-        
-        # Textos únicos estudiados
-        texts_studied = attempts.values('quiz__text').distinct().count()
-        
-        # Textos aprobados (score >= 80%)
-        texts_passed = attempts.filter(score__gte=80).values('quiz__text').distinct().count()
-        
-        # Tiempo total en minutos
+        # 1. Textos Estudiados = Rutas COMPLETADAS (Finalizados)
+        # Esto asegura que solo cuente 1 cuando realmente terminaste el curso
+        texts_studied = StudentLearningPath.objects.filter(
+            user=user, 
+            is_completed=True
+        ).count()
+
+        # 2. Materiales Generados = Conteo real de materiales
+        materials_generated = UserDidacticMaterial.objects.filter(user=user).count()
+
+        # 3. Racha de estudio (desde el perfil)
+        study_streak = user.profile.study_streak if hasattr(user, 'profile') else 0
+
+        # Estadísticas de intentos
+        total_attempts = attempts.count()
+        average_score = attempts.aggregate(Avg('score'))['score__avg'] or 0
         total_time = sum(a.time_spent_seconds for a in attempts) // 60
         
+        # Textos aprobados (opcional, basado en intentos con >80)
+        texts_passed = attempts.filter(score__gte=80).values('quiz__text').distinct().count()
+        
         return Response({
-            'total_attempts': stats['total_attempts'],
-            'texts_studied': texts_studied,
-            'average_score': round(stats['average_score'] or 0, 2),
+            'total_attempts': total_attempts,
+            'texts_studied': texts_studied,        # <--- AHORA ES SOLO FINALIZADOS
+            'materials_generated': materials_generated, # <--- NUEVO DATO
+            'average_score': round(average_score, 2),
             'texts_passed': texts_passed,
-            'total_time_minutes': total_time
+            'total_time_minutes': total_time,
+            'study_streak': study_streak           # <--- PARA EL DASHBOARD
         })
 
 

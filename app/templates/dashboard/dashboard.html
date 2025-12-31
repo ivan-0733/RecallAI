@@ -168,7 +168,7 @@
                         <div class="card-header">
                             <h3 class="card-title">
                                 <i class="fas fa-road mr-2"></i>
-                                Tu Ruta de Aprendizaje (Flujo Activo)
+                                Tu Ruta de la Retención (Flujo Activo)
                             </h3>
                         </div>
                         <div class="card-body" id="activePathsBody">
@@ -522,9 +522,10 @@ function renderTexts(texts) {
                 'Authorization': 'Bearer ' + token
             },
             success: function(stats) {
-                $('.info-box-number').eq(0).text(stats.texts_studied);
-                $('.info-box-number').eq(1).text(stats.total_attempts);
-                $('.info-box-number').eq(3).text(stats.study_streak + ' días');
+                $('.info-box-number').eq(0).text(stats.texts_studied);      // Textos Finalizados
+                $('.info-box-number').eq(1).text(stats.total_attempts);     // Intentos de Quiz
+                $('.info-box-number').eq(2).text(stats.materials_generated); // <--- AHORA SÍ SE MUESTRA EL CONTEO REAL
+                $('.info-box-number').eq(3).text((stats.study_streak || 0) + ' días'); // <--- Racha segura
             }
         });
     }

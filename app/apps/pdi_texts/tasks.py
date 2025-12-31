@@ -210,36 +210,46 @@ def generate_adaptive_quiz_task(self, learning_path_id, material_id):
         material = UserDidacticMaterial.objects.get(id=material_id)
         fixed_topics = path.fixed_topics_order  # LISTA DE 20 TEMAS MAESTROS
         
-        # Construir Prompt Estricto
+        # Construir Prompt Estricto (Mejorado para brevedad y calidad)
         prompt = f"""
-        ERES UN EXPERTO EXAMINADOR ACADÉMICO.
+        ERES UN EXPERTO PROFESOR UNIVERSITARIO.
         
         CONTEXTO:
         El alumno está en la Sesión #{path.current_session}.
-        Acaba de estudiar un material sobre: {material.material_type}.
-        Temas débiles detectados recientemente: {material.weak_topics}
+        Material de estudio reciente: {material.material_type}.
+        Temas débiles a reforzar: {material.weak_topics}
         
         TU MISIÓN:
-        Generar un cuestionario de EXACTAMENTE 20 PREGUNTAS.
+        Generar un cuestionario de EXACTAMENTE 20 PREGUNTAS de opción múltiple.
         
-        REGLA DE ORO - TEMAS FIJOS E INMUTABLES:
+        REGLA DE ORO 1 - TEMAS FIJOS:
         Debes generar EXACTAMENTE UNA pregunta para CADA UNO de los siguientes 20 temas, respetando ESTE ORDEN EXACTO:
         {json.dumps(fixed_topics, ensure_ascii=False)}
         
+        REGLA DE ORO 2 - CALIDAD Y BREVEDAD (CRÍTICO):
+        1. **Preguntas directas:** Evita introducciones largas. Ve al grano. (Máx 2 frases).
+        2. **Opciones concisas:** Las opciones A, B, C, D deben ser breves y de longitud similar entre sí.
+        3. **EVITAR SESGOS:** La respuesta correcta NO debe ser sistemáticamente la más larga ni la más detallada. Todas las opciones deben parecer plausibles.
+        4. **Estilo:** Académico pero ágil, similar a un examen de certificación.
+        
         INSTRUCCIONES DE ADAPTABILIDAD:
-        1. Para los temas que coinciden con los 'temas débiles' del alumno: Haz la pregunta DIFÍCIL y conceptual.
-        2. Para los demás temas: Haz la pregunta de dificultad MEDIA.
-        3. El contenido debe relacionarse con el material estudiado ({material.material_type}) si es pertinente.
+        1. Si el tema coincide con 'temas débiles': Pregunta DIFÍCIL (análisis/aplicación).
+        2. Si el tema NO es débil: Pregunta MEDIA (concepto/definición).
         
         FORMATO DE SALIDA (JSON estricto):
         {{
             "questions": [
                 {{
-                    "pregunta": "¿Pregunta sobre el TEMA 1...?",
-                    "opciones": ["A) ..", "B) ..", "C) ..", "D) .."],
-                    "respuesta_correcta": "A",
+                    "pregunta": "¿Cuál es la función principal de...?",
+                    "opciones": [
+                        "A) Opción corta 1",
+                        "B) Opción corta 2",
+                        "C) Opción corta 3",
+                        "D) Opción corta 4"
+                    ],
+                    "respuesta_correcta": "B",
                     "tema": "{fixed_topics[0]}", 
-                    "explicacion": "..."
+                    "explicacion": "Explicación breve y directa."
                 }},
                 ... (así sucesivamente hasta el tema 20)
             ]
