@@ -87,14 +87,13 @@
                         <div class="card-body" id="detailedAnswers"></div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" id="actionButtonsCard">
                         <div class="card-body text-center">
-                            <a href="/dashboard/" class="btn btn-primary btn-lg">
-                                <i class="fas fa-home"></i> Ir al Dashboard
-                            </a>
-                            <button onclick="showMaterialSelector()" class="btn btn-warning btn-lg ml-2">
-                                <i class="fas fa-lightbulb"></i> Generar Material Didáctico
-                            </button>
+                            <div id="actionButtonsLoading">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <p class="mt-2">Cargando estado del flujo...</p>
+                            </div>
+                            <div id="actionButtonsContainer" style="display: none;"></div>
                         </div>
                     </div>
                 </div>
@@ -111,6 +110,8 @@
     let textId;
     let attemptId;
     let currentScore;
+    let flowStatus = null;
+    let selectedMaterialType = null;
 
     $(document).ready(function() {
         const pathParts = window.location.pathname.split('/');
@@ -124,6 +125,8 @@
             const result = JSON.parse(resultStr);
             displayResults(result);
             localStorage.removeItem('quiz_result');
+            // ✅ CORRECCIÓN: Cargar estado del flujo también cuando viene de localStorage
+            loadFlowStatus();
         } else {
             loadResultsFromAPI();
         }
@@ -181,6 +184,116 @@
                 }
             }
         });
+
+        loadFlowStatus();
+    }
+
+    function loadFlowStatus() {
+        const token = localStorage.getItem('access_token');
+        
+        $.ajax({
+            url: `/api/texts/${textId}/flow-status/`,
+            type: 'GET',
+            headers: { 'Authorization': 'Bearer ' + token },
+            success: function(response) {
+                flowStatus = response;
+                renderActionButtons();
+            },
+            error: function() {
+                renderFallbackButtons();
+            }
+        });
+    }
+
+    function renderActionButtons() {
+        $('#actionButtonsLoading').hide();
+        const container = $('#actionButtonsContainer');
+        container.empty();
+        
+        let buttonsHTML = '';
+        
+        // Dashboard siempre
+        buttonsHTML += `
+            <a href="/dashboard/" class="btn btn-secondary btn-lg mr-2">
+                <i class="fas fa-home"></i> Ir al Dashboard
+            </a>
+        `;
+        
+        if (!flowStatus.has_path) {
+            buttonsHTML += `
+                <a href="/quiz/${textId}/" class="btn btn-primary btn-lg">
+                    <i class="fas fa-play"></i> Tomar Pre-Test
+                </a>
+            `;
+        } else if (flowStatus.is_completed) {
+            buttonsHTML += `
+                <a href="/text/${textId}/post-test/" class="btn btn-danger btn-lg">
+                    <i class="fas fa-flag-checkered"></i> Realizar Post-Test
+                </a>
+            `;
+        } else if (flowStatus.current_session === 0) {
+            if (flowStatus.has_material) {
+                // Ya tiene material - mostrar botón para ver lista de materiales
+                buttonsHTML += `
+                    <a href="/materials/history/${textId}/" class="btn btn-success btn-lg">
+                        <i class="fas fa-book"></i> Ver Mis Materiales
+                    </a>
+                `;
+            } else {
+                // No tiene material - mostrar selector
+                buttonsHTML += `
+                    <button onclick="showMaterialSelector()" class="btn btn-warning btn-lg">
+                        <i class="fas fa-lightbulb"></i> Elegir Material de Estudio
+                    </button>
+                `;
+            }
+        } else {
+            const sessionLabel = flowStatus.current_session + 1;
+            
+            // Siempre mostrar acceso a materiales
+            buttonsHTML += `
+                <a href="/materials/history/${textId}/" class="btn btn-success btn-lg">
+                    <i class="fas fa-book"></i> Ver Mis Materiales
+                </a>
+            `;
+            
+            // Si hay quiz pendiente, mostrar botón
+            if (flowStatus.has_pending_quiz) {
+                buttonsHTML += `
+                    <a href="/quiz/${textId}/adaptive/${flowStatus.adaptive_quiz_id}/" class="btn btn-info btn-lg ml-2">
+                        <i class="fas fa-clipboard-check"></i> Tomar Quiz Sesión ${sessionLabel}
+                    </a>
+                `;
+            }
+            
+            // Si necesita generar nuevo material (último quiz más reciente que último material)
+            if (flowStatus.needs_new_material) {
+                // Guardar el attempt_id del último quiz para usarlo al generar material
+                window.lastAttemptIdForMaterial = flowStatus.last_attempt_id;
+                buttonsHTML += `
+                    <button onclick="showMaterialSelectorForAdaptive()" class="btn btn-warning btn-lg ml-2">
+                        <i class="fas fa-plus-circle"></i> Generar Nuevo Material
+                    </button>
+                `;
+            }
+        }
+        
+        container.html(buttonsHTML);
+        container.show();
+    }
+
+    function renderFallbackButtons() {
+        $('#actionButtonsLoading').hide();
+        const container = $('#actionButtonsContainer');
+        container.html(`
+            <a href="/dashboard/" class="btn btn-secondary btn-lg mr-2">
+                <i class="fas fa-home"></i> Ir al Dashboard
+            </a>
+            <button onclick="showMaterialSelector()" class="btn btn-warning btn-lg">
+                <i class="fas fa-lightbulb"></i> Generar Material Didáctico
+            </button>
+        `);
+        container.show();
     }
 
     function displayResults(result) {
@@ -443,14 +556,55 @@
         });
     }
 
+    function showLoadingModal(materialType) {
+        const materialNames = {
+            'flashcard': 'Flashcards Interactivas',
+            'decision_tree': 'Árbol de Decisión',
+            'mind_map': 'Mapa Mental',
+            'summary': 'Resumen Estructurado'
+        };
+        
+        const loadingHTML = `
+        <div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-body text-center p-5">
+                        <div class="spinner-border text-primary mb-4" style="width: 4rem; height: 4rem;" role="status">
+                            <span class="sr-only">Generando...</span>
+                        </div>
+                        <h4 class="mb-3">Generando ${materialNames[materialType] || 'Material'}</h4>
+                        <p class="text-muted mb-2">Esto puede tomar 1-2 minutos...</p>
+                        <p class="text-muted small">Por favor no cierres esta ventana</p>
+                        <div class="progress mt-4" style="height: 8px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+        
+        // Remover modal anterior si existe
+        $('#loadingModal').remove();
+        $('body').append(loadingHTML);
+        $('#loadingModal').modal('show');
+    }
+
+    function hideLoadingModal() {
+        $('#loadingModal').modal('hide');
+        setTimeout(() => $('#loadingModal').remove(), 500);
+    }
+
     function generateMaterial(materialType, wasRecommended, followedRecommendation) {
         const token = localStorage.getItem('access_token');
         
+        // Cerrar modal de selección y mostrar modal de carga
         $('#materialSelectorModal').modal('hide');
-        
-        toastr.info('Generando material... Esto puede tomar 1-2 minutos', '', {
-            timeOut: 5000
-        });
+        setTimeout(() => {
+            $('#materialSelectorModal').remove();
+            showLoadingModal(materialType);
+        }, 5000);
         
         $.ajax({
             url: '/api/texts/generate-material/',
@@ -475,6 +629,7 @@
                 }, 5000);
             },
             error: function(xhr) {
+                hideLoadingModal();
                 toastr.error('Error al generar material: ' + (xhr.responseJSON?.error || 'Error desconocido'));
             }
         });
@@ -499,6 +654,7 @@
                 
                 if (latestMaterial) {
                     clearInterval(pollInterval);
+                    hideLoadingModal();
                     toastr.success('¡Material listo! Redirigiendo...', '', {timeOut: 2000});
                     
                     setTimeout(function() {
@@ -509,9 +665,23 @@
             error: function(xhr) {
                 console.error('Error checking material status:', xhr);
                 clearInterval(pollInterval);
+                hideLoadingModal();
                 toastr.error('Error al verificar el estado del material');
             }
         });
     }
+
+    // Función para mostrar selector de material basado en último quiz adaptativo
+    function showMaterialSelectorForAdaptive() {
+        if (!window.lastAttemptIdForMaterial) {
+            toastr.error('No se encontró el último intento de quiz');
+            return;
+        }
+        
+        // Usar el attemptId del último quiz adaptativo
+        attemptId = window.lastAttemptIdForMaterial;
+        showMaterialSelector();
+    }
+
 </script>
 {% endblock %}

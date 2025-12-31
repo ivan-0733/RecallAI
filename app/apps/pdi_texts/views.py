@@ -181,6 +181,84 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             'message': '¡Excelente! Has aprobado' if passed else 'Necesitas reforzar algunos temas'
         })
     
+    @action(detail=True, methods=['get'], url_path='flow-status')
+    def get_flow_status(self, request, pk=None):
+        """
+        Obtener el estado actual del flujo de aprendizaje del usuario
+        GET /api/texts/{id}/flow-status/
+        """
+        text = self.get_object()
+        user = request.user
+        
+        try:
+            path = StudentLearningPath.objects.get(user=user, text=text)
+            
+            # Material más reciente
+            latest_material = UserDidacticMaterial.objects.filter(
+                user=user,
+                text=text
+            ).order_by('-requested_at').first()
+            
+            # Quiz adaptativo pendiente
+            pending_quiz = AdaptiveQuiz.objects.filter(
+                user=user,
+                text=text,
+                learning_path=path
+            ).order_by('-created_at').first()
+            
+            # Verificar si el quiz ya fue respondido
+            quiz_already_taken = False
+            if pending_quiz:
+                quiz_already_taken = QuizAttempt.objects.filter(
+                    user=user,
+                    pdi_text=text,
+                    quiz_type='adaptive'
+                ).filter(
+                    created_at__gte=pending_quiz.created_at
+                ).exists()
+            
+            # Verificar si hay un intento de quiz adaptativo más reciente que el material
+            latest_adaptive_attempt = QuizAttempt.objects.filter(
+                user=user,
+                pdi_text=text,
+                quiz_type='adaptive'
+            ).order_by('-created_at').first()
+            
+            # Determinar si necesita generar nuevo material
+            needs_new_material = False
+            if latest_adaptive_attempt and latest_material:
+                # Si el último quiz adaptativo es más reciente que el último material
+                needs_new_material = latest_adaptive_attempt.created_at > latest_material.requested_at
+            elif latest_adaptive_attempt and not latest_material:
+                needs_new_material = True
+            
+            return Response({
+                'has_path': True,
+                'current_session': path.current_session,
+                'is_completed': path.is_completed,
+                'has_material': latest_material is not None,
+                'material_id': latest_material.id if latest_material else None,
+                'material_type': latest_material.material_type if latest_material else None,
+                'has_pending_quiz': pending_quiz is not None and not quiz_already_taken,
+                'adaptive_quiz_id': pending_quiz.id if pending_quiz and not quiz_already_taken else None,
+                'session_label': f"Sesión {path.current_session + 1}",
+                'needs_new_material': needs_new_material,
+                'last_attempt_id': latest_adaptive_attempt.id if latest_adaptive_attempt else None
+            })
+            
+        except StudentLearningPath.DoesNotExist:
+            return Response({
+                'has_path': False,
+                'current_session': 0,
+                'is_completed': False,
+                'has_material': False,
+                'material_id': None,
+                'material_type': None,
+                'has_pending_quiz': False,
+                'adaptive_quiz_id': None,
+                'session_label': 'Pre-Test'
+            })
+    
     @action(detail=True, methods=['post'], url_path='submit-quiz')
     def submit_quiz(self, request, pk=None):
         """
@@ -400,9 +478,10 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             )
         
         # Registrar solicitud
+        # ✅ CORREGIDO: Usar pdi_text en lugar de quiz.text
         MaterialRequest.objects.create(
             user=request.user,
-            text=attempt.quiz.text,
+            text=attempt.pdi_text,
             attempt=attempt,
             material_type=material_type,
             was_recommended=was_recommended,

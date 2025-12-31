@@ -396,10 +396,10 @@
                     <p id="materialType">Cargando...</p>
                     <h1 id="materialTitle">Material de Estudio</h1>
                 </div>
-                <div>
-                    <a href="/dashboard/" class="btn btn-custom">
+                <div id="actionButtonsHeader" style="display: flex; gap: 10px;">
+                    <button onclick="endSessionAndGoToDashboard()" class="btn btn-custom">
                         <i class="fas fa-home"></i> Dashboard
-                    </a>
+                    </button>
                 </div>
             </div>
         
@@ -434,6 +434,13 @@
     <script>
         let materialData = null;
         const materialId = window.location.pathname.split('/')[2]; 
+
+        // Variables de tracking (si study_tracker.js no las define)
+        let currentSessionId = null;
+        let sessionStartTime = Date.now();
+        let idleTime = 0;
+        let interactionCount = 0;
+        let maxScrollDepth = 0;
 
         $(document).ready(function() {
             loadMaterial();
@@ -900,6 +907,124 @@
                 buttonColor: 'white'
             };
         }
+
+    // ========================================
+    // FLUJO ADAPTATIVO Y CIERRE DE SESIÓN
+    // ========================================
+    
+    let flowStatus = null;
+    let textId = null;
+    
+    async function initFlowStatus() {
+        try {
+            // Obtener text_id del material
+            const materialInfo = await fetch(`/api/materials/${materialId}/`, {
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+            }).then(r => r.json());
+            
+            textId = materialInfo.text;
+            
+            if (textId) {
+                const response = await fetch(`/api/texts/${textId}/flow-status/`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+                });
+                flowStatus = await response.json();
+                updateActionButtons();
+            }
+        } catch (e) {
+            console.log('Error loading flow status:', e);
+        }
+    }
+    
+    function updateActionButtons() {
+        const container = document.getElementById('actionButtonsHeader');
+        if (!container || !flowStatus) return;
+        
+        const sessionLabel = (flowStatus.current_session || 0) + 1;
+        let buttonsHTML = `
+            <button onclick="endSessionAndGoToDashboard()" class="btn btn-custom">
+                <i class="fas fa-home"></i> Dashboard
+            </button>
+        `;
+        
+        if (flowStatus.has_pending_quiz && flowStatus.adaptive_quiz_id) {
+            buttonsHTML += `
+                <button onclick="endSessionAndGoToQuiz(${flowStatus.adaptive_quiz_id})" class="btn btn-info" style="background: linear-gradient(135deg, #00b4db, #0083b0); color: white; border: none;">
+                    <i class="fas fa-clipboard-check"></i> Tomar Quiz Sesión ${sessionLabel}
+                </button>
+            `;
+        }
+        
+        if (flowStatus.is_completed) {
+            buttonsHTML += `
+                <button onclick="endSessionAndGoToPostTest()" class="btn btn-danger" style="background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; border: none;">
+                    <i class="fas fa-flag-checkered"></i> Post-Test
+                </button>
+            `;
+        }
+        
+        container.innerHTML = buttonsHTML;
+    }
+    
+    async function endTrackingSession(exitType = 'normal') {
+        // Sincronizar con study_tracker.js
+        const sessionId = (window.studyTracker && window.studyTracker.sessionId) ? window.studyTracker.sessionId : currentSessionId;
+        const startTime = (window.studyTracker && window.studyTracker.sessionStartTime) ? window.studyTracker.sessionStartTime : sessionStartTime;
+        const idle = (window.studyTracker && typeof window.studyTracker.idleTime !== 'undefined') ? window.studyTracker.idleTime : idleTime;
+        const interactions = (window.studyTracker && window.studyTracker.interactionCount) ? window.studyTracker.interactionCount : interactionCount;
+        const scrollDepth = (window.studyTracker && window.studyTracker.maxScrollDepth) ? window.studyTracker.maxScrollDepth : maxScrollDepth;
+        
+        if (!sessionId) {
+            console.log('No hay sesión activa para cerrar');
+            return;
+        }
+        
+        const totalTime = Math.floor((Date.now() - startTime) / 1000);
+        
+        try {
+            await fetch('/api/tracking/session/end/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('access_token'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    total_time_seconds: totalTime,
+                    active_time_seconds: Math.max(0, totalTime - idle),
+                    exit_type: exitType,
+                    metrics: {
+                        total_interactions: interactions,
+                        max_scroll_depth: scrollDepth
+                    }
+                })
+            });
+            console.log('✅ Sesión cerrada');
+        } catch (e) {
+            console.error('Error cerrando sesión:', e);
+        }
+    }
+    
+    async function endSessionAndGoToDashboard() {
+        await endTrackingSession('navigate_dashboard');
+        window.location.href = '/dashboard/';
+    }
+    
+    async function endSessionAndGoToQuiz(quizId) {
+        await endTrackingSession('navigate_quiz');
+        window.location.href = `/quiz/${textId}/adaptive/${quizId}/`;
+    }
+    
+    async function endSessionAndGoToPostTest() {
+        await endTrackingSession('navigate_post_test');
+        window.location.href = `/text/${textId}/post-test/`;
+    }
+    
+    // Inicializar flujo al cargar (después de que study_tracker esté listo)
+    window.addEventListener('load', function() {
+        setTimeout(initFlowStatus, 500);
+    });
+
     </script>
 
     <script src="{% static 'js/study_tracker.js' %}"></script>

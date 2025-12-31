@@ -29,7 +29,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configurar Gemini
-genai.configure(api_key=settings.GEMINI_API_KEY)
+genai.configure(api_key="AIzaSyCiuS4-BEmH9Hc_c0XRXv20n2n8HJYcLso")
 
 # Tags HTML permitidos para sanitización
 ALLOWED_TAGS = [
@@ -66,8 +66,12 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         from apps.application_user.models import User
         user = User.objects.get(id=user_id)
         attempt = QuizAttempt.objects.get(id=attempt_id)
-        text = attempt.quiz.text
-        initial_quiz = attempt.quiz 
+        
+        # ✅ CORREGIDO: Usar pdi_text en lugar de quiz.text
+        text = attempt.pdi_text
+        
+        # ✅ CORREGIDO: Obtener initial_quiz desde el texto, no desde el attempt
+        initial_quiz = text.initial_quiz
         
         logger.info(f"Generando {material_type} para {user.email} en texto {text.id}")
         
@@ -86,7 +90,7 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
         logger.info(f"Lógica 75/25 - Temas Repaso (COMPLEMENTO): {review_topics}")
         # --- Fin de la lógica 75/25 ---
 
-        answers = attempt.get_answers()
+        answers = attempt.answers_json
         quiz_questions = initial_quiz.get_questions()
         
         incorrect_questions_text = ""
@@ -367,11 +371,16 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
             from apps.pdi_texts.tasks import generate_adaptive_quiz_task
             
             # Disparar tarea
-            generate_adaptive_quiz_task.delay(
-                learning_path_id=path.id,
-                material_id=material.id
+            generate_adaptive_quiz_task.apply_async(
+                kwargs={
+                    'user_id': user_id,
+                    'text_id': text.id,
+                    'attempt_id': attempt_id,
+                    'learning_path_id': path.id
+                },
+                countdown=120  # Esperar 2 minutos (120 segundos)
             )
-            logger.info(f"🚀 [FLUJO AUTOMÁTICO] Iniciada generación de Quiz Adaptativo para Sesión {path.current_session}")
+            logger.info(f"🚀 [FLUJO AUTOMÁTICO] Programada generación de Quiz Adaptativo para Sesión {path.current_session} (delay 2 min)")
             
         except StudentLearningPath.DoesNotExist:
             logger.warning("⚠️ No se encontró Learning Path. Generación de material aislada (fuera de flujo).")
