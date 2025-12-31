@@ -197,6 +197,8 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
         # 1. RECUPERAR PREGUNTAS Y RESPUESTAS CORRECTAS
         # ---------------------------------------------------------
         questions_data = []
+
+        quiz_instance = None
         
         if quiz_type == 'initial':
             if not hasattr(text, 'initial_quiz'):
@@ -265,6 +267,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             user=user,
             pdi_text=text,          # Modelo: pdi_text
             quiz_type=quiz_type,    # Modelo: quiz_type
+            quiz=quiz_instance,
             score=final_score,      # Modelo: score
             answers_json=detailed_answers, # Modelo: answers_json
             weak_topics=weak_topics, # Modelo: weak_topics
