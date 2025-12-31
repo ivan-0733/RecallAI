@@ -350,7 +350,7 @@ class PDITextViewSet(viewsets.ReadOnlyModelViewSet):
             detailed_answers.append({
                 # ... datos detallados ...
                 'question_index': i,
-                'user_answer': user_response,
+                'selected_answer': user_response,
                 'correct_answer': correct_option,
                 'is_correct': is_correct,
                 'topic': question.get('tema'),

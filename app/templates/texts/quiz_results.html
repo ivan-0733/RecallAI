@@ -307,157 +307,226 @@
         container.show();
     }
     function displayResults(result) {
-        const passed = result.passed;
-        const score = result.score;
-        attemptId = result.attempt.id;
-
-        lastQuizType = result.attempt.quiz_type;
-
-        currentScore = score;
-        
-        let resultHTML = `
+    // ✅ DEBUG: Ver estructura completa
+    console.log('🔍 RESULTADO COMPLETO:', result);
+    console.log('🔍 DETAILED ANSWERS:', result.detailed_answers);
+    if (result.detailed_answers && result.detailed_answers.length > 0) {
+        console.log('🔍 PRIMERA PREGUNTA:', result.detailed_answers[0]);
+    }
+    
+    // ✅ Validar que result tenga la estructura esperada
+    if (!result || !result.attempt) {
+        console.error('Invalid result structure:', result);
+        $('#resultCard').html(`
             <div class="card-body text-center p-5">
-                ${passed 
-                    ? '<i class="fas fa-trophy fa-5x text-success mb-3"></i><h1 class="display-4 text-success">¡Felicidades! Has aprobado</h1>'
-                    : '<i class="fas fa-times-circle fa-5x text-danger mb-3"></i><h1 class="display-4 text-danger">Necesitas mejorar</h1>'
-                }
-                <h2 class="display-1 font-weight-bold">${score.toFixed(1)}%</h2>
-                <p class="lead">${result.message}</p>
-                
-                <div class="row mt-4">
-                    <div class="col-md-4">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Correctas</span>
-                                <span class="info-box-number">${result.correct_count}</span>
-                            </div>
+                <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                <h4>Error en los datos del resultado</h4>
+                <p>No se pudo cargar la información del quiz correctamente.</p>
+                <a href="/dashboard/" class="btn btn-primary mt-3">
+                    <i class="fas fa-home"></i> Volver al Dashboard
+                </a>
+            </div>
+        `);
+        return;
+    }
+
+    const passed = result.passed || false;
+    const score = result.score || 0;
+    attemptId = result.attempt.id;
+    lastQuizType = result.attempt.quiz_type || 'initial';
+    currentScore = score;
+    
+    // ✅ Guardar metadata para futuras recargas
+    if (result.quiz_metadata) {
+        localStorage.setItem('last_quiz_metadata', JSON.stringify(result.quiz_metadata));
+    } else {
+        localStorage.setItem('last_quiz_metadata', JSON.stringify({
+            quiz_type: lastQuizType,
+            quiz_id: result.attempt.quiz_id || null
+        }));
+    }
+    
+    // ✅ Calcular estadísticas con valores por defecto
+    const totalQuestions = result.total_questions || (result.detailed_answers ? result.detailed_answers.length : 20);
+    const correctCount = result.correct_count || 0;
+    const incorrectCount = totalQuestions - correctCount;
+    const timeSpent = result.attempt.time_spent_seconds || 0;
+    const timeMinutes = Math.floor(timeSpent / 60);
+    const timeSeconds = timeSpent % 60;
+    
+    console.log('📊 ESTADÍSTICAS:', { totalQuestions, correctCount, incorrectCount, timeSpent });
+    
+    let resultHTML = `
+        <div class="card-body text-center p-5">
+            ${passed 
+                ? '<i class="fas fa-trophy fa-5x text-success mb-3"></i><h1 class="display-4 text-success">¡Felicidades! Has aprobado</h1>'
+                : '<i class="fas fa-times-circle fa-5x text-danger mb-3"></i><h1 class="display-4 text-danger">Necesitas mejorar</h1>'
+            }
+            <h2 class="display-1 font-weight-bold">${score.toFixed(1)}%</h2>
+            <p class="lead">${result.message || 'Revisa tus respuestas para mejorar.'}</p>
+            
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Correctas</span>
+                            <span class="info-box-number">${correctCount}</span>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Incorrectas</span>
-                                <span class="info-box-number">${result.total_questions - result.correct_count}</span>
-                            </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Incorrectas</span>
+                            <span class="info-box-number">${incorrectCount}</span>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-info"><i class="far fa-clock"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Tiempo</span>
-                                <span class="info-box-number">${Math.floor(result.attempt.time_spent_seconds / 60)}:${String(result.attempt.time_spent_seconds % 60).padStart(2, '0')}</span>
-                            </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-box">
+                        <span class="info-box-icon bg-info"><i class="far fa-clock"></i></span>
+                        <div class="info-box-content">
+                            <span class="info-box-text">Tiempo</span>
+                            <span class="info-box-number">${timeMinutes}:${String(timeSeconds).padStart(2, '0')}</span>
                         </div>
                     </div>
                 </div>
             </div>
-        `;
-        
-        $('#resultCard').html(resultHTML);
-        
-        // --- CORRECCIÓN: Calcular estadísticas por tema localmente ---
-        const topicStats = {};
-        
-        // 1. Calcular conteos basados en las respuestas detalladas
-        if (result.detailed_answers && Array.isArray(result.detailed_answers)) {
-            result.detailed_answers.forEach(ans => {
-                const topicName = ans.topic || 'General';
-                if (!topicStats[topicName]) {
-                    topicStats[topicName] = { total: 0, incorrect: 0 };
-                }
-                topicStats[topicName].total++;
-                if (!ans.is_correct) {
-                    topicStats[topicName].incorrect++;
-                }
-            });
-        }
+        </div>
+    `;
+    
+    $('#resultCard').html(resultHTML);
+    
+    // Calcular estadísticas por tema
+    const topicStats = {};
+    if (result.detailed_answers && Array.isArray(result.detailed_answers)) {
+        result.detailed_answers.forEach(ans => {
+            const topicName = ans.topic || ans.tema || 'General';
+            if (!topicStats[topicName]) {
+                topicStats[topicName] = { total: 0, incorrect: 0 };
+            }
+            topicStats[topicName].total++;
+            if (!ans.is_correct) {
+                topicStats[topicName].incorrect++;
+            }
+        });
+    }
 
-        // 2. Filtrar solo los temas con errores para mostrarlos como "débiles"
-        const topicsWithErrors = Object.keys(topicStats).filter(t => topicStats[t].incorrect > 0);
-
-        if (topicsWithErrors.length > 0) {
-            $('#weakTopicsCard').show();
-            let topicsHtml = '<ul class="list-group">';
+    const topicsWithErrors = Object.keys(topicStats).filter(t => topicStats[t].incorrect > 0);
+    if (topicsWithErrors.length > 0) {
+        $('#weakTopicsCard').show();
+        let topicsHtml = '<ul class="list-group">';
+        topicsWithErrors.forEach(topic => {
+            const stat = topicStats[topic];
+            topicsHtml += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${topic}
+                    <span class="badge badge-danger badge-pill">${stat.incorrect} error(es) de ${stat.total}</span>
+                </li>
+            `;
+        });
+        topicsHtml += '</ul>';
+        $('#weakTopicsList').html(topicsHtml);
+    } else {
+        $('#weakTopicsCard').hide();
+    }
+    
+    // ✅ Mostrar respuestas detalladas con TODOS los posibles nombres de campos
+    let detailedHtml = '';
+    if (result.detailed_answers && Array.isArray(result.detailed_answers) && result.detailed_answers.length > 0) {
+        result.detailed_answers.forEach(function(answer, index) {
+            if (!answer) return;
             
-            topicsWithErrors.forEach(topic => {
-                const stat = topicStats[topic];
-                topicsHtml += `
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        ${topic}
-                        <span class="badge badge-danger badge-pill">${stat.incorrect} error(es) de ${stat.total}</span>
-                    </li>
-                `;
-            });
-            topicsHtml += '</ul>';
-            $('#weakTopicsList').html(topicsHtml);
-        } else {
-             $('#weakTopicsCard').hide();
-        }
-        
-        // Mostrar respuestas detalladas con opciones
-        let detailedHtml = '';
-        if (result.detailed_answers) {
-            result.detailed_answers.forEach(function(answer, index) {
-                const cardClass = answer.is_correct ? 'border-success' : 'border-danger';
-                const iconClass = answer.is_correct ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+            console.log(`🔍 PREGUNTA ${index + 1}:`, answer);
+            
+            const isCorrect = answer.is_correct || false;
+            const cardClass = isCorrect ? 'border-success' : 'border-danger';
+            const iconClass = isCorrect ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+            
+            // ✅ BUSCAR EN MÚLTIPLES POSIBLES CAMPOS
+            const questionText = answer.question || answer.pregunta || answer.question_text || answer.texto_pregunta || `Pregunta ${index + 1}`;
+            const topic = answer.topic || answer.tema || answer.topic_name || 'General';
+            const explanation = answer.explanation || answer.explicacion || answer.explanation_text || '';
+            
+            console.log(`   Texto pregunta: "${questionText}"`);
+            console.log(`   Tema: "${topic}"`);
+            console.log(`   Explicación: "${explanation}"`);
 
-                let optionsHtml = '<ul class="list-group list-group-flush">';
-                if (answer.opciones && Array.isArray(answer.opciones)) {
-                    answer.opciones.forEach(function(opcion) {
-                        const optionLetter = opcion.substring(0, 1);
-                        
-                        let liClass = 'list-group-item';
-                        let icon = '';
-                        let optionText = opcion;
+            let optionsHtml = '<ul class="list-group list-group-flush">';
+            const opciones = answer.opciones || answer.options || answer.choices || [];
+            
+            console.log(`   Opciones:`, opciones);
+            
+            if (Array.isArray(opciones) && opciones.length > 0) {
+                opciones.forEach(function(opcion) {
+                    if (!opcion) return;
+                    
+                    const optionLetter = opcion.toString().substring(0, 1);
+                    const correctAnswer = answer.correct_answer || answer.respuesta_correcta || answer.correct || '';
+                    const selectedAnswer = answer.selected_answer || answer.respuesta_seleccionada || answer.selected || '';
+                    
+                    let liClass = 'list-group-item';
+                    let icon = '';
+                    let optionText = opcion;
 
-                        if (optionLetter === answer.correct_answer) {
-                            optionText = `<strong class="text-success">${opcion}</strong>`;
-                            icon = ' <i class="fas fa-check-circle text-success ml-2"></i>';
-                        
-                        } else if (optionLetter === answer.selected_answer && !answer.is_correct) {
-                            optionText = `<strong class="text-danger">${opcion}</strong>`;
-                            icon = ' <i class="fas fa-times-circle text-danger ml-2"></i>';
-                        }
+                    if (optionLetter === correctAnswer) {
+                        optionText = `<strong class="text-success">${opcion}</strong>`;
+                        icon = ' <i class="fas fa-check-circle text-success ml-2"></i>';
+                    } else if (optionLetter === selectedAnswer && !isCorrect) {
+                        optionText = `<strong class="text-danger">${opcion}</strong>`;
+                        icon = ' <i class="fas fa-times-circle text-danger ml-2"></i>';
+                    }
 
-                        optionsHtml += `<li class="${liClass}">${optionText}${icon}</li>`;
-                    });
-                }
-                optionsHtml += '</ul>';
+                    optionsHtml += `<li class="${liClass}">${optionText}${icon}</li>`;
+                });
+            } else {
+                optionsHtml += '<li class="list-group-item text-muted">Opciones no disponibles</li>';
+            }
+            optionsHtml += '</ul>';
 
-                detailedHtml += `
-                    <div class="card mb-3 ${cardClass}">
-                        <div class="card-header">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">
-                                    <i class="fas ${iconClass}"></i>
-                                    Pregunta ${index + 1}
-                                </h5>
-                                <span class="badge badge-info">${answer.topic}</span>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>${answer.question}</strong></p>
-                            
-                            <div class="mb-3">
-                                ${optionsHtml}
-                            </div>
-
-                            ${!answer.is_correct ? `
-                                <div class="alert alert-info mt-3">
-                                    <strong>Explicación:</strong> ${answer.explanation}
-                                </div>
-                            ` : ''}
+            detailedHtml += `
+                <div class="card mb-3 ${cardClass}">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas ${iconClass}"></i>
+                                Pregunta ${index + 1}
+                            </h5>
+                            <span class="badge badge-info">${topic}</span>
                         </div>
                     </div>
-                `;
-            });
-        }
-        
-        $('#detailedAnswers').html(detailedHtml);
+                    <div class="card-body">
+                        <p><strong>${questionText}</strong></p>
+                        
+                        <div class="mb-3">
+                            ${optionsHtml}
+                        </div>
+
+                        ${!isCorrect && explanation ? `
+                            <div class="alert alert-info mt-3">
+                                <strong><i class="fas fa-lightbulb"></i> Explicación:</strong><br>
+                                ${explanation}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        detailedHtml = `
+            <div class="alert alert-warning text-center">
+                <i class="fas fa-info-circle mr-2"></i>
+                No hay detalles de respuestas disponibles para este quiz.
+            </div>
+        `;
     }
+    
+    $('#detailedAnswers').html(detailedHtml);
+    
+    console.log('✅ Renderizado completado');
+}
 
     function showMaterialSelector(result) {
         const token = localStorage.getItem('access_token');

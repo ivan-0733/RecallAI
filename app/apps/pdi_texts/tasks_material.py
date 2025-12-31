@@ -99,7 +99,12 @@ def generate_didactic_material(self, user_id, attempt_id, material_type):
                 if 'question_index' in answer and 0 <= answer['question_index'] < len(quiz_questions):
                     question = quiz_questions[answer['question_index']]
                     incorrect_questions_text += f"- {question['pregunta']}\n"
-                    incorrect_questions_text += f"  Tu respuesta: {answer['selected_answer']}\n"
+                    
+                    # --- CAMBIO DE SEGURIDAD ---
+                    # Intentamos obtener 'selected_answer', si no existe, buscamos 'user_answer' (formato antiguo)
+                    user_resp = answer.get('selected_answer', answer.get('user_answer', 'Sin respuesta'))
+                    
+                    incorrect_questions_text += f"  Tu respuesta: {user_resp}\n"
                     incorrect_questions_text += f"  Correcta: {question['respuesta_correcta']}\n\n"
         
         text_content_preview = text.content[:3000] if text.content else ""

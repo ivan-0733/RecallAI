@@ -437,8 +437,17 @@
             },
             data: JSON.stringify(payload),
             success: function(response) {
-                // Guardar resultado en localStorage
-                localStorage.setItem('quiz_result', JSON.stringify(response));
+                // ✅ Guardar resultado completo con metadatos
+                const fullResult = {
+                    ...response,
+                    quiz_metadata: {
+                        text_id: textId,
+                        quiz_type: isAdaptiveMode ? 'adaptive' : 'initial',
+                        quiz_id: isAdaptiveMode ? adaptiveQuizId : null,
+                        timestamp: new Date().toISOString()
+                    }
+                };
+                localStorage.setItem('quiz_result', JSON.stringify(fullResult));
                 
                 // Redirigir a página de resultados
                 window.location.href = `/quiz/${textId}/results/`;
